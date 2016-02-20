@@ -194,6 +194,7 @@ LIBS=   libcrypto.a libssl.a
 SHARED_CRYPTO=libcrypto$(SHLIB_EXT)
 SHARED_SSL=libssl$(SHLIB_EXT)
 SHARED_LIBS={- '$(SHARED_CRYPTO) $(SHARED_SSL)' if (!$config{no_shared}) -}
+SHARED_CFLAG={- $target{shared_cflag} -}
 SHARED_LDFLAG={- $target{shared_ldflag}
                  # Unlike other OSes (like Solaris, Linux, Tru64,
                  # IRIX) BSD run-time linkers (tested OpenBSD, NetBSD
@@ -209,6 +210,7 @@ SHARED_LDFLAG={- $target{shared_ldflag}
                  . ($config{target} =~ m|^BSD-| && $prefix !~ m|^/usr/.*$|
                     ? " -Wl,-rpath,\$\$(LIBRPATH)" : "") -}
 SHARED_RCFLAG={- $target{shared_rcflag} -}
+DYNAMIC_ENGINES={- $config{dynamic_engines} -}
 
 GENERAL=        Makefile
 BASENAME=       openssl
@@ -249,10 +251,11 @@ CLEARENV=	TOP= && unset TOP $${LIB+LIB} $${LIBS+LIBS}	\
 # same language for uniform treatment.
 BUILDENV=	LC_ALL=C PLATFORM='$(PLATFORM)' PROCESSOR='$(PROCESSOR)'\
 		CC='$(CC)' CFLAG='$(CFLAG)' CFLAG_Q='$(CFLAG_Q)'	\
+		SHARED_CFLAG='$(SHARED_CFLAG)'				\
 		AS='$(CC)' ASFLAG='$(CFLAG) -c'			\
 		AR='$(AR)' NM='$(NM)' RANLIB='$(RANLIB)'	\
-		CROSS_COMPILE='$(CROSS_COMPILE)'	\
-		PERL='$(PERL)'	\
+		CROSS_COMPILE='$(CROSS_COMPILE)'		\
+		PERL='$(PERL)' DYNAMIC_ENGINES='$(DYNAMIC_ENGINES)'	\
 		SDIRS='$(SDIRS)' LIBRPATH='$(INSTALLTOP)/$(LIBDIR)'	\
 		DESTDIR='$(DESTDIR)'		\
 		INSTALLTOP='$(INSTALLTOP)' OPENSSLDIR='$(OPENSSLDIR)'	\

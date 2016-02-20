@@ -18,7 +18,7 @@ PADLOCK_ASM_OBJ=
 PLIB_LDFLAG=
 EX_LIBS=
 
-CFLAGS= $(INCLUDES) $(CFLAG)
+CFLAGS= $(INCLUDES) $(CFLAG) $(SHARED_CFLAG)
 ASFLAGS= $(INCLUDES) $(ASFLAG)
 AFLAGS= $(ASFLAGS)
 
@@ -57,7 +57,7 @@ top:
 all:	lib
 
 lib:	$(LIBOBJ) $(TESTLIBOBJ)
-	@if [ -n "$(SHARED_LIBS)" ]; then \
+	@if [ "$(DYNAMIC_ENGINES)" = 1 ]; then \
 		set -e; \
 		for l in $(LIBNAMES) $(TESTLIBNAMES); do \
 			$(MAKE) -f ../Makefile.shared -e \
