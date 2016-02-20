@@ -1,4 +1,3 @@
-/* ssl/record/ssl3_buffer.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -120,6 +119,19 @@ void SSL3_BUFFER_set_data(SSL3_BUFFER *b, const unsigned char *d, int n)
     b->offset = 0;
 }
 
+/*
+ * Clear the contents of an SSL3_BUFFER but retain any memory allocated
+ */
+void SSL3_BUFFER_clear(SSL3_BUFFER *b)
+{
+    unsigned char *buf = b->buf;
+    size_t len = b->len;
+
+    memset(b, 0, sizeof(*b));
+    b->buf = buf;
+    b->len = len;
+}
+
 void SSL3_BUFFER_release(SSL3_BUFFER *b)
 {
     OPENSSL_free(b->buf);
@@ -134,7 +146,7 @@ int ssl3_setup_read_buffer(SSL *s)
     
     b = RECORD_LAYER_get_rbuf(&s->rlayer);
 
-    if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+    if (SSL_IS_DTLS(s))
         headerlen = DTLS1_RT_HEADER_LENGTH;
     else
         headerlen = SSL3_RT_HEADER_LENGTH;
@@ -146,10 +158,6 @@ int ssl3_setup_read_buffer(SSL *s)
     if (b->buf == NULL) {
         len = SSL3_RT_MAX_PLAIN_LENGTH
             + SSL3_RT_MAX_ENCRYPTED_OVERHEAD + headerlen + align;
-        if (s->options & SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER) {
-            s->s3->init_extra = 1;
-            len += SSL3_RT_MAX_EXTRA;
-        }
 #ifndef OPENSSL_NO_COMP
         if (ssl_allow_compression(s))
             len += SSL3_RT_MAX_COMPRESSED_OVERHEAD;
@@ -176,7 +184,7 @@ int ssl3_setup_write_buffer(SSL *s)
 
     wb = RECORD_LAYER_get_wbuf(&s->rlayer);
 
-    if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+    if (SSL_IS_DTLS(s))
         headerlen = DTLS1_RT_HEADER_LENGTH + 1;
     else
         headerlen = SSL3_RT_HEADER_LENGTH;

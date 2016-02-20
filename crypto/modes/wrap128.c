@@ -1,4 +1,3 @@
-/* crypto/modes/wrap128.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL
  * project. Mode with padding contributed by Petr Spacek
@@ -59,7 +58,7 @@
  *  allows you to use them for any 128 bit block cipher.
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/modes.h>
 
 /** RFC 3394 section 2.2.3.1 Default Initial Value */

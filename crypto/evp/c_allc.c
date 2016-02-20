@@ -1,4 +1,3 @@
-/* crypto/evp/c_allc.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,12 +56,13 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
+#include <internal/evp_int.h>
 #include <openssl/pkcs12.h>
 #include <openssl/objects.h>
 
-void OpenSSL_add_all_ciphers(void)
+void openssl_add_all_ciphers_internal(void)
 {
 
 #ifndef OPENSSL_NO_DES
@@ -255,5 +255,12 @@ void OpenSSL_add_all_ciphers(void)
     EVP_add_cipher(EVP_camellia_128_ctr());
     EVP_add_cipher(EVP_camellia_192_ctr());
     EVP_add_cipher(EVP_camellia_256_ctr());
+#endif
+
+#ifndef OPENSSL_NO_CHACHA
+    EVP_add_cipher(EVP_chacha20());
+# ifndef OPENSSL_NO_POLY1305
+    EVP_add_cipher(EVP_chacha20_poly1305());
+# endif
 #endif
 }

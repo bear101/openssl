@@ -1,4 +1,3 @@
-/* crypto/rsa/rsa_sign.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +56,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
 #include <openssl/objects.h>
@@ -77,7 +76,7 @@ int RSA_sign(int type, const unsigned char *m, unsigned int m_len,
     const unsigned char *s = NULL;
     X509_ALGOR algor;
     ASN1_OCTET_STRING digest;
-    if ((rsa->flags & RSA_FLAG_SIGN_VER) && rsa->meth->rsa_sign) {
+    if (rsa->meth->rsa_sign) {
         return rsa->meth->rsa_sign(type, m, m_len, sigret, siglen, rsa);
     }
     /* Special case: SSL signature, just check the length */
@@ -200,14 +199,13 @@ int int_rsa_verify(int dtype, const unsigned char *m,
             memcpy(rm, s + 2, 16);
             *prm_len = 16;
             ret = 1;
-        } else if (memcmp(m, s + 2, 16))
+        } else if (memcmp(m, s + 2, 16)) {
             RSAerr(RSA_F_INT_RSA_VERIFY, RSA_R_BAD_SIGNATURE);
-        else
+        } else {
             ret = 1;
-    }
-
-    /* Special case: SSL signature */
-    if (dtype == NID_md5_sha1) {
+        }
+    } else if (dtype == NID_md5_sha1) {
+        /* Special case: SSL signature */
         if ((i != SSL_SIG_LENGTH) || memcmp(s, m, SSL_SIG_LENGTH))
             RSAerr(RSA_F_INT_RSA_VERIFY, RSA_R_BAD_SIGNATURE);
         else
@@ -237,11 +235,6 @@ int int_rsa_verify(int dtype, const unsigned char *m,
 
         sigtype = OBJ_obj2nid(sig->algor->algorithm);
 
-#ifdef RSA_DEBUG
-        /* put a backward compatibility flag in EAY */
-        fprintf(stderr, "in(%s) expect(%s)\n", OBJ_nid2ln(sigtype),
-                OBJ_nid2ln(dtype));
-#endif
         if (sigtype != dtype) {
             RSAerr(RSA_F_INT_RSA_VERIFY, RSA_R_ALGORITHM_MISMATCH);
             goto err;
@@ -272,7 +265,7 @@ int RSA_verify(int dtype, const unsigned char *m, unsigned int m_len,
                const unsigned char *sigbuf, unsigned int siglen, RSA *rsa)
 {
 
-    if ((rsa->flags & RSA_FLAG_SIGN_VER) && rsa->meth->rsa_verify) {
+    if (rsa->meth->rsa_verify) {
         return rsa->meth->rsa_verify(dtype, m, m_len, sigbuf, siglen, rsa);
     }
 

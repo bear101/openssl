@@ -1,4 +1,3 @@
-/* asn1t.h */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2000.
@@ -84,7 +83,10 @@ extern "C" {
 #  define ASN1_ITEM_start(itname) \
         OPENSSL_GLOBAL const ASN1_ITEM itname##_it = {
 
-#  define ASN1_ITEM_end(itname) \
+#  define static_ASN1_ITEM_start(itname) \
+        static const ASN1_ITEM itname##_it = {
+
+#  define ASN1_ITEM_end(itname)                 \
                 };
 
 # else
@@ -98,6 +100,9 @@ extern "C" {
         const ASN1_ITEM * itname##_it(void) \
         { \
                 static const ASN1_ITEM local_it = {
+
+#  define static_ASN1_ITEM_start(itname) \
+        static ASN1_ITEM_start(itname)
 
 #  define ASN1_ITEM_end(itname) \
                 }; \
@@ -114,6 +119,17 @@ extern "C" {
 # define ASN1_ITEM_TEMPLATE_END(tname) \
         ;\
         ASN1_ITEM_start(tname) \
+                ASN1_ITYPE_PRIMITIVE,\
+                -1,\
+                &tname##_item_tt,\
+                0,\
+                NULL,\
+                0,\
+                #tname \
+        ASN1_ITEM_end(tname)
+# define static_ASN1_ITEM_TEMPLATE_END(tname) \
+        ;\
+        static_ASN1_ITEM_start(tname) \
                 ASN1_ITYPE_PRIMITIVE,\
                 -1,\
                 &tname##_item_tt,\
@@ -151,9 +167,23 @@ extern "C" {
 
 # define ASN1_SEQUENCE_END(stname) ASN1_SEQUENCE_END_name(stname, stname)
 
+# define static_ASN1_SEQUENCE_END(stname) static_ASN1_SEQUENCE_END_name(stname, stname)
+
 # define ASN1_SEQUENCE_END_name(stname, tname) \
         ;\
         ASN1_ITEM_start(tname) \
+                ASN1_ITYPE_SEQUENCE,\
+                V_ASN1_SEQUENCE,\
+                tname##_seq_tt,\
+                sizeof(tname##_seq_tt) / sizeof(ASN1_TEMPLATE),\
+                NULL,\
+                sizeof(stname),\
+                #stname \
+        ASN1_ITEM_end(tname)
+
+# define static_ASN1_SEQUENCE_END_name(stname, tname) \
+        ;\
+        static_ASN1_ITEM_start(tname) \
                 ASN1_ITYPE_SEQUENCE,\
                 V_ASN1_SEQUENCE,\
                 tname##_seq_tt,\
@@ -196,16 +226,41 @@ extern "C" {
                 sizeof(tname),\
                 #tname \
         ASN1_ITEM_end(tname)
+# define static_ASN1_NDEF_SEQUENCE_END(tname) \
+        ;\
+        static_ASN1_ITEM_start(tname)			\
+                ASN1_ITYPE_NDEF_SEQUENCE,\
+                V_ASN1_SEQUENCE,\
+                tname##_seq_tt,\
+                sizeof(tname##_seq_tt) / sizeof(ASN1_TEMPLATE),\
+                NULL,\
+                sizeof(tname),\
+                #tname \
+        ASN1_ITEM_end(tname)
 
 # define ASN1_BROKEN_SEQUENCE_END(stname) ASN1_SEQUENCE_END_ref(stname, stname)
+# define static_ASN1_BROKEN_SEQUENCE_END(stname) \
+	static_ASN1_SEQUENCE_END_ref(stname, stname)
 
 # define ASN1_SEQUENCE_END_enc(stname, tname) ASN1_SEQUENCE_END_ref(stname, tname)
 
 # define ASN1_SEQUENCE_END_cb(stname, tname) ASN1_SEQUENCE_END_ref(stname, tname)
+# define static_ASN1_SEQUENCE_END_cb(stname, tname) static_ASN1_SEQUENCE_END_ref(stname, tname)
 
 # define ASN1_SEQUENCE_END_ref(stname, tname) \
         ;\
         ASN1_ITEM_start(tname) \
+                ASN1_ITYPE_SEQUENCE,\
+                V_ASN1_SEQUENCE,\
+                tname##_seq_tt,\
+                sizeof(tname##_seq_tt) / sizeof(ASN1_TEMPLATE),\
+                &tname##_aux,\
+                sizeof(stname),\
+                #stname \
+        ASN1_ITEM_end(tname)
+# define static_ASN1_SEQUENCE_END_ref(stname, tname) \
+        ;\
+        static_ASN1_ITEM_start(tname) \
                 ASN1_ITYPE_SEQUENCE,\
                 V_ASN1_SEQUENCE,\
                 tname##_seq_tt,\
@@ -259,11 +314,27 @@ extern "C" {
 
 # define ASN1_CHOICE_END(stname) ASN1_CHOICE_END_name(stname, stname)
 
+# define static_ASN1_CHOICE_END(stname) static_ASN1_CHOICE_END_name(stname, stname)
+
 # define ASN1_CHOICE_END_name(stname, tname) ASN1_CHOICE_END_selector(stname, tname, type)
+
+# define static_ASN1_CHOICE_END_name(stname, tname) static_ASN1_CHOICE_END_selector(stname, tname, type)
 
 # define ASN1_CHOICE_END_selector(stname, tname, selname) \
         ;\
         ASN1_ITEM_start(tname) \
+                ASN1_ITYPE_CHOICE,\
+                offsetof(stname,selname) ,\
+                tname##_ch_tt,\
+                sizeof(tname##_ch_tt) / sizeof(ASN1_TEMPLATE),\
+                NULL,\
+                sizeof(stname),\
+                #stname \
+        ASN1_ITEM_end(tname)
+
+# define static_ASN1_CHOICE_END_selector(stname, tname, selname) \
+        ;\
+        static_ASN1_ITEM_start(tname) \
                 ASN1_ITYPE_CHOICE,\
                 offsetof(stname,selname) ,\
                 tname##_ch_tt,\
@@ -318,6 +389,8 @@ extern "C" {
 # endif
 /* Plain simple type */
 # define ASN1_SIMPLE(stname, field, type) ASN1_EX_TYPE(0,0, stname, field, type)
+/* Embedded simple type */
+# define ASN1_EMBED(stname, field, type) ASN1_EX_TYPE(ASN1_TFLG_EMBED,0, stname, field, type)
 
 /* OPTIONAL simple type */
 # define ASN1_OPT(stname, field, type) ASN1_EX_TYPE(ASN1_TFLG_OPTIONAL, 0, stname, field, type)
@@ -543,6 +616,9 @@ struct ASN1_ADB_TABLE_st {
  */
 
 # define ASN1_TFLG_NDEF          (0x1<<11)
+
+/* Field is embedded and not a pointer */
+# define ASN1_TFLG_EMBED         (0x1 << 12)
 
 /* This is the actual ASN1 item itself */
 
@@ -887,7 +963,7 @@ DECLARE_ASN1_ITEM(BIGNUM)
 DECLARE_ASN1_ITEM(LONG)
 DECLARE_ASN1_ITEM(ZLONG)
 
-DECLARE_STACK_OF(ASN1_VALUE)
+DEFINE_STACK_OF(ASN1_VALUE)
 
 /* Functions used internally by the ASN1 code */
 

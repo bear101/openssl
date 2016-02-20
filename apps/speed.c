@@ -94,16 +94,8 @@
 # include <signal.h>
 #endif
 
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32)
 # include <windows.h>
-# if defined(__CYGWIN__) && !defined(_WIN32)
-  /*
-   * <windows.h> should define _WIN32, which normally is mutually exclusive
-   * with __CYGWIN__, but if it didn't...
-   */
-#  define _WIN32
-  /* this is done because Cygwin alarm() fails sometimes. */
-# endif
 #endif
 
 #include <openssl/bn.h>
@@ -129,7 +121,6 @@
 # include <openssl/md5.h>
 #endif
 #include <openssl/hmac.h>
-#include <openssl/evp.h>
 #include <openssl/sha.h>
 #ifndef OPENSSL_NO_RMD160
 # include <openssl/ripemd.h>
@@ -168,12 +159,9 @@
 # include "./testdsa.h"
 #endif
 #ifndef OPENSSL_NO_EC
-# include <openssl/ecdsa.h>
-# include <openssl/ecdh.h>
+# include <openssl/ec.h>
 #endif
 #include <openssl/modes.h>
-
-#include <openssl/bn.h>
 
 #ifndef HAVE_FORK
 # if defined(OPENSSL_SYS_VMS) || defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_OS2) || defined(OPENSSL_SYS_NETWARE)
@@ -297,9 +285,9 @@ static double Time_F(int s)
         schlock = 0;
         thr = CreateThread(NULL, 4096, sleepy, NULL, 0, NULL);
         if (thr == NULL) {
-            DWORD ret = GetLastError();
-            BIO_printf(bio_err, "unable to CreateThread (%d)", ret);
-            ExitProcess(ret);
+            DWORD err = GetLastError();
+            BIO_printf(bio_err, "unable to CreateThread (%lu)", err);
+            ExitProcess(err);
         }
         while (!schlock)
             Sleep(0);           /* scheduler spinlock */
@@ -358,22 +346,21 @@ OPTIONS speed_options[] = {
     {OPT_HELP_STR, 1, '-', "Usage: %s [options] ciphers...\n"},
     {OPT_HELP_STR, 1, '-', "Valid options are:\n"},
     {"help", OPT_HELP, '-', "Display this summary"},
-#if defined(TIMES) || defined(USE_TOD)
-    {"elapsed", OPT_ELAPSED, '-',
-     "Measure time in real time instead of CPU user time"},
-#endif
     {"evp", OPT_EVP, 's', "Use specified EVP cipher"},
     {"decrypt", OPT_DECRYPT, '-',
      "Time decryption instead of encryption (only EVP)"},
-#ifndef NO_FORK
-    {"multi", OPT_MULTI, 'p', "Run benchmarks in parallel"},
-#endif
     {"mr", OPT_MR, '-', "Produce machine readable output"},
     {"mb", OPT_MB, '-'},
     {"misalign", OPT_MISALIGN, 'n', "Amount to mis-align buffers"},
+    {"elapsed", OPT_ELAPSED, '-',
+     "Measure time in real time instead of CPU user time"},
+#ifndef NO_FORK
+    {"multi", OPT_MULTI, 'p', "Run benchmarks in parallel"},
+#endif
 #ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 #endif
+    {NULL},
 };
 
 #define D_MD2           0
@@ -406,7 +393,7 @@ OPTIONS speed_options[] = {
 #define D_IGE_192_AES   27
 #define D_IGE_256_AES   28
 #define D_GHASH         29
-OPT_PAIR doit_choices[] = {
+static OPT_PAIR doit_choices[] = {
 #ifndef OPENSSL_NO_MD2
     {"md2", D_MD2},
 #endif
@@ -428,7 +415,7 @@ OPT_PAIR doit_choices[] = {
 #ifndef OPENSSL_NO_WHIRLPOOL
     {"whirlpool", D_WHIRLPOOL},
 #endif
-#ifndef OPENSSL_NO_RIPEMD
+#ifndef OPENSSL_NO_RMD160
     {"ripemd", D_RMD160},
     {"rmd160", D_RMD160},
     {"ripemd160", D_RMD160},
@@ -522,7 +509,7 @@ static OPT_PAIR rsa_choices[] = {
 #define R_EC_B283    13
 #define R_EC_B409    14
 #define R_EC_B571    15
-#ifndef OPENSSL_NO_ECA
+#ifndef OPENSSL_NO_EC
 static OPT_PAIR ecdsa_choices[] = {
     {"ecdsap160", R_EC_P160},
     {"ecdsap192", R_EC_P192},
@@ -576,7 +563,6 @@ int speed_main(int argc, char **argv)
     long c[ALGOR_NUM][SIZE_NUM], count = 0, save_count = 0;
     unsigned char *buf_malloc = NULL, *buf2_malloc = NULL;
     unsigned char *buf = NULL, *buf2 = NULL;
-    unsigned char *save_buf = NULL, *save_buf2 = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
 #ifndef NO_FORK
     int multi = 0;
@@ -604,7 +590,7 @@ int speed_main(int argc, char **argv)
 #ifndef OPENSSL_NO_WHIRLPOOL
     unsigned char whirlpool[WHIRLPOOL_DIGEST_LENGTH];
 #endif
-#ifndef OPENSSL_NO_RIPEMD
+#ifndef OPENSSL_NO_RMD160
     unsigned char rmd160[RIPEMD160_DIGEST_LENGTH];
 #endif
 #ifndef OPENSSL_NO_RC4
@@ -754,9 +740,6 @@ int speed_main(int argc, char **argv)
     long ecdh_c[EC_NUM][2];
     int ecdh_doit[EC_NUM];
 #endif
-#ifndef TIMES
-    usertime = -1;
-#endif
 
     memset(results, 0, sizeof(results));
 #ifndef OPENSSL_NO_DSA
@@ -828,11 +811,11 @@ int speed_main(int argc, char **argv)
         case OPT_ENGINE:
             (void)setup_engine(opt_arg(), 0);
             break;
-#ifndef NO_FORK
         case OPT_MULTI:
+#ifndef NO_FORK
             multi = atoi(opt_arg());
-            break;
 #endif
+            break;
         case OPT_MISALIGN:
             if (!opt_int(opt_arg(), &misalign))
                 goto end;
@@ -874,7 +857,7 @@ int speed_main(int argc, char **argv)
 #ifndef OPENSSL_NO_RSA
 # ifndef RSA_NULL
         if (strcmp(*argv, "openssl") == 0) {
-            RSA_set_default_method(RSA_PKCS1_SSLeay());
+            RSA_set_default_method(RSA_PKCS1_OpenSSL());
             continue;
         }
 # endif
@@ -945,7 +928,7 @@ int speed_main(int argc, char **argv)
 #endif
 
     /* No parameters; turn on everything. */
-    if (argc == 0) {
+    if ((argc == 0) && !doit[D_EVP]) {
         for (i = 0; i < ALGOR_NUM; i++)
             if (i != D_EVP)
                 doit[i] = 1;
@@ -1088,6 +1071,7 @@ int speed_main(int argc, char **argv)
         c[D_SHA256][i] = c[D_SHA256][0] * 4 * l0 / l1;
         c[D_SHA512][i] = c[D_SHA512][0] * 4 * l0 / l1;
         c[D_WHIRLPOOL][i] = c[D_WHIRLPOOL][0] * 4 * l0 / l1;
+        c[D_GHASH][i] = c[D_GHASH][0] * 4 * l0 / l1;
 
         l0 = (long)lengths[i - 1];
 
@@ -1303,24 +1287,28 @@ int speed_main(int argc, char **argv)
 
 #if !defined(OPENSSL_NO_MD5)
     if (doit[D_HMAC]) {
-        HMAC_CTX hctx;
+        HMAC_CTX *hctx = NULL;
 
-        HMAC_CTX_init(&hctx);
-        HMAC_Init_ex(&hctx, (unsigned char *)"This is a key...",
+        hctx = HMAC_CTX_new();
+        if (hctx == NULL) {
+            BIO_printf(bio_err, "HMAC malloc failure, exiting...");
+            exit(1);
+        }
+        HMAC_Init_ex(hctx, (unsigned char *)"This is a key...",
                      16, EVP_md5(), NULL);
 
         for (j = 0; j < SIZE_NUM; j++) {
             print_message(names[D_HMAC], c[D_HMAC][j], lengths[j]);
             Time_F(START);
             for (count = 0, run = 1; COND(c[D_HMAC][j]); count++) {
-                HMAC_Init_ex(&hctx, NULL, 0, NULL, NULL);
-                HMAC_Update(&hctx, buf, lengths[j]);
-                HMAC_Final(&hctx, &(hmac[0]), NULL);
+                HMAC_Init_ex(hctx, NULL, 0, NULL, NULL);
+                HMAC_Update(hctx, buf, lengths[j]);
+                HMAC_Final(hctx, &(hmac[0]), NULL);
             }
             d = Time_F(STOP);
             print_result(D_HMAC, j, count, d);
         }
-        HMAC_CTX_cleanup(&hctx);
+        HMAC_CTX_free(hctx);
     }
 #endif
     if (doit[D_SHA1]) {
@@ -1645,8 +1633,8 @@ int speed_main(int argc, char **argv)
             if (!
                 (EVP_CIPHER_flags(evp_cipher) &
                  EVP_CIPH_FLAG_TLS1_1_MULTIBLOCK)) {
-                fprintf(stderr, "%s is not multi-block capable\n",
-                        OBJ_nid2ln(evp_cipher->nid));
+                BIO_printf(bio_err, "%s is not multi-block capable\n",
+                           OBJ_nid2ln(EVP_CIPHER_nid(evp_cipher)));
                 goto end;
             }
             multiblock_speed(evp_cipher);
@@ -1656,43 +1644,43 @@ int speed_main(int argc, char **argv)
 #endif
         for (j = 0; j < SIZE_NUM; j++) {
             if (evp_cipher) {
-                EVP_CIPHER_CTX ctx;
+                EVP_CIPHER_CTX *ctx;
                 int outl;
 
-                names[D_EVP] = OBJ_nid2ln(evp_cipher->nid);
+                names[D_EVP] = OBJ_nid2ln(EVP_CIPHER_nid(evp_cipher));
                 /*
                  * -O3 -fschedule-insns messes up an optimization here!
                  * names[D_EVP] somehow becomes NULL
                  */
                 print_message(names[D_EVP], save_count, lengths[j]);
 
-                EVP_CIPHER_CTX_init(&ctx);
+                ctx = EVP_CIPHER_CTX_new();
                 if (decrypt)
-                    EVP_DecryptInit_ex(&ctx, evp_cipher, NULL, key16, iv);
+                    EVP_DecryptInit_ex(ctx, evp_cipher, NULL, key16, iv);
                 else
-                    EVP_EncryptInit_ex(&ctx, evp_cipher, NULL, key16, iv);
-                EVP_CIPHER_CTX_set_padding(&ctx, 0);
+                    EVP_EncryptInit_ex(ctx, evp_cipher, NULL, key16, iv);
+                EVP_CIPHER_CTX_set_padding(ctx, 0);
 
                 Time_F(START);
                 if (decrypt)
                     for (count = 0, run = 1;
                          COND(save_count * 4 * lengths[0] / lengths[j]);
                          count++)
-                        EVP_DecryptUpdate(&ctx, buf, &outl, buf, lengths[j]);
+                        EVP_DecryptUpdate(ctx, buf, &outl, buf, lengths[j]);
                 else
                     for (count = 0, run = 1;
                          COND(save_count * 4 * lengths[0] / lengths[j]);
                          count++)
-                        EVP_EncryptUpdate(&ctx, buf, &outl, buf, lengths[j]);
+                        EVP_EncryptUpdate(ctx, buf, &outl, buf, lengths[j]);
                 if (decrypt)
-                    EVP_DecryptFinal_ex(&ctx, buf, &outl);
+                    EVP_DecryptFinal_ex(ctx, buf, &outl);
                 else
-                    EVP_EncryptFinal_ex(&ctx, buf, &outl);
+                    EVP_EncryptFinal_ex(ctx, buf, &outl);
                 d = Time_F(STOP);
-                EVP_CIPHER_CTX_cleanup(&ctx);
+                EVP_CIPHER_CTX_free(ctx);
             }
             if (evp_md) {
-                names[D_EVP] = OBJ_nid2ln(evp_md->type);
+                names[D_EVP] = OBJ_nid2ln(EVP_MD_type(evp_md));
                 print_message(names[D_EVP], save_count, lengths[j]);
 
                 Time_F(START);
@@ -2046,8 +2034,8 @@ int speed_main(int argc, char **argv)
  show_res:
 #endif
     if (!mr) {
-        printf("%s\n", SSLeay_version(SSLEAY_VERSION));
-        printf("%s\n", SSLeay_version(SSLEAY_BUILT_ON));
+        printf("%s\n", OpenSSL_version(OPENSSL_VERSION));
+        printf("%s\n", OpenSSL_version(OPENSSL_BUILT_ON));
         printf("options:");
         printf("%s ", BN_options());
 #ifndef OPENSSL_NO_MD2
@@ -2068,7 +2056,7 @@ int speed_main(int argc, char **argv)
 #ifndef OPENSSL_NO_BF
         printf("%s ", BF_options());
 #endif
-        printf("\n%s\n", SSLeay_version(SSLEAY_CFLAGS));
+        printf("\n%s\n", OpenSSL_version(OPENSSL_CFLAGS));
     }
 
     if (pr_header) {
@@ -2184,8 +2172,8 @@ int speed_main(int argc, char **argv)
 
  end:
     ERR_print_errors(bio_err);
-    OPENSSL_free(save_buf);
-    OPENSSL_free(save_buf2);
+    OPENSSL_free(buf_malloc);
+    OPENSSL_free(buf2_malloc);
 #ifndef OPENSSL_NO_RSA
     for (i = 0; i < RSA_NUM; i++)
         RSA_free(rsa_key[i]);
@@ -2202,7 +2190,6 @@ int speed_main(int argc, char **argv)
         EC_KEY_free(ecdh_b[i]);
     }
 #endif
-
     return (ret);
 }
 
@@ -2286,11 +2273,11 @@ static int do_multi(int multi)
     fds = malloc(sizeof(*fds) * multi);
     for (n = 0; n < multi; ++n) {
         if (pipe(fd) == -1) {
-            fprintf(stderr, "pipe failure\n");
+            BIO_printf(bio_err, "pipe failure\n");
             exit(1);
         }
         fflush(stdout);
-        fflush(stderr);
+        (void)BIO_flush(bio_err);
         if (fork()) {
             close(fd[1]);
             fds[n] = fd[0];
@@ -2298,7 +2285,7 @@ static int do_multi(int multi)
             close(fd[0]);
             close(1);
             if (dup(fd[1]) == -1) {
-                fprintf(stderr, "dup failed\n");
+                BIO_printf(bio_err, "dup failed\n");
                 exit(1);
             }
             close(fd[1]);
@@ -2322,7 +2309,7 @@ static int do_multi(int multi)
             if (p)
                 *p = '\0';
             if (buf[0] != '+') {
-                fprintf(stderr, "Don't understand line '%s' from child %d\n",
+                BIO_printf(bio_err, "Don't understand line '%s' from child %d\n",
                         buf, n);
                 continue;
             }
@@ -2424,7 +2411,7 @@ static int do_multi(int multi)
             else if (strncmp(buf, "+H:", 3) == 0) {
                 ;
             } else
-                fprintf(stderr, "Unknown type '%s' from child %d\n", buf, n);
+                BIO_printf(bio_err, "Unknown type '%s' from child %d\n", buf, n);
         }
 
         fclose(f);
@@ -2441,16 +2428,16 @@ static void multiblock_speed(const EVP_CIPHER *evp_cipher)
     int j, count, num = OSSL_NELEM(lengths);
     const char *alg_name;
     unsigned char *inp, *out, no_key[32], no_iv[16];
-    EVP_CIPHER_CTX ctx;
+    EVP_CIPHER_CTX *ctx;
     double d = 0.0;
 
     inp = app_malloc(mblengths[num - 1], "multiblock input buffer");
     out = app_malloc(mblengths[num - 1] + 1024, "multiblock output buffer");
-    EVP_CIPHER_CTX_init(&ctx);
-    EVP_EncryptInit_ex(&ctx, evp_cipher, NULL, no_key, no_iv);
-    EVP_CIPHER_CTX_ctrl(&ctx, EVP_CTRL_AEAD_SET_MAC_KEY, sizeof(no_key),
+    ctx = EVP_CIPHER_CTX_new();
+    EVP_EncryptInit_ex(ctx, evp_cipher, NULL, no_key, no_iv);
+    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_MAC_KEY, sizeof(no_key),
                         no_key);
-    alg_name = OBJ_nid2ln(evp_cipher->nid);
+    alg_name = OBJ_nid2ln(EVP_CIPHER_nid(evp_cipher));
 
     for (j = 0; j < num; j++) {
         print_message(alg_name, 0, mblengths[j]);
@@ -2472,16 +2459,14 @@ static void multiblock_speed(const EVP_CIPHER *evp_cipher)
             mb_param.len = len;
             mb_param.interleave = 8;
 
-            packlen = EVP_CIPHER_CTX_ctrl(&ctx,
-                                          EVP_CTRL_TLS1_1_MULTIBLOCK_AAD,
+            packlen = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_TLS1_1_MULTIBLOCK_AAD,
                                           sizeof(mb_param), &mb_param);
 
             if (packlen > 0) {
                 mb_param.out = out;
                 mb_param.inp = inp;
                 mb_param.len = len;
-                EVP_CIPHER_CTX_ctrl(&ctx,
-                                    EVP_CTRL_TLS1_1_MULTIBLOCK_ENCRYPT,
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_TLS1_1_MULTIBLOCK_ENCRYPT,
                                     sizeof(mb_param), &mb_param);
             } else {
                 int pad;
@@ -2490,10 +2475,9 @@ static void multiblock_speed(const EVP_CIPHER *evp_cipher)
                 len += 16;
                 aad[11] = len >> 8;
                 aad[12] = len;
-                pad = EVP_CIPHER_CTX_ctrl(&ctx,
-                                          EVP_CTRL_AEAD_TLS1_AAD,
+                pad = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_TLS1_AAD,
                                           EVP_AEAD_TLS1_AAD_LEN, aad);
-                EVP_Cipher(&ctx, out, inp, len + pad);
+                EVP_Cipher(ctx, out, inp, len + pad);
             }
         }
         d = Time_F(STOP);
@@ -2531,4 +2515,5 @@ static void multiblock_speed(const EVP_CIPHER *evp_cipher)
 
     OPENSSL_free(inp);
     OPENSSL_free(out);
+    EVP_CIPHER_CTX_free(ctx);
 }

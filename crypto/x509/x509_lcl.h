@@ -1,4 +1,3 @@
-/* x509_lcl.h */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2013.
@@ -72,12 +71,7 @@ struct X509_VERIFY_PARAM_st {
     int trust;                  /* trust setting to check */
     int depth;                  /* Verify depth */
     STACK_OF(ASN1_OBJECT) *policies; /* Permissible policies */
-    X509_VERIFY_PARAM_ID *id;   /* opaque ID data */
-};
-
-/* internal only structure to hold additional X509_VERIFY_PARAM data */
-
-struct X509_VERIFY_PARAM_ID_st {
+    /* Peer identity details */
     STACK_OF(OPENSSL_STRING) *hosts; /* Set of acceptable names */
     unsigned int hostflags;     /* Flags to control matching features */
     char *peername;             /* Matching hostname in peer certificate */
@@ -98,5 +92,30 @@ struct x509_attributes_st {
 struct X509_extension_st {
     ASN1_OBJECT *object;
     ASN1_BOOLEAN critical;
-    ASN1_OCTET_STRING *value;
+    ASN1_OCTET_STRING value;
 };
+
+/*
+ * Method to handle CRL access. In general a CRL could be very large (several
+ * Mb) and can consume large amounts of resources if stored in memory by
+ * multiple processes. This method allows general CRL operations to be
+ * redirected to more efficient callbacks: for example a CRL entry database.
+ */
+
+#define X509_CRL_METHOD_DYNAMIC         1
+
+struct x509_crl_method_st {
+    int flags;
+    int (*crl_init) (X509_CRL *crl);
+    int (*crl_free) (X509_CRL *crl);
+    int (*crl_lookup) (X509_CRL *crl, X509_REVOKED **ret,
+                       ASN1_INTEGER *ser, X509_NAME *issuer);
+    int (*crl_verify) (X509_CRL *crl, EVP_PKEY *pk);
+};
+
+typedef struct lookup_dir_hashes_st BY_DIR_HASH;
+typedef struct lookup_dir_entry_st BY_DIR_ENTRY;
+DEFINE_STACK_OF(BY_DIR_HASH)
+DEFINE_STACK_OF(BY_DIR_ENTRY)
+typedef STACK_OF(X509_NAME_ENTRY) STACK_OF_X509_NAME_ENTRY;
+DEFINE_STACK_OF(STACK_OF_X509_NAME_ENTRY)

@@ -89,6 +89,7 @@ int nseq_main(int argc, char **argv)
         switch (o) {
         case OPT_EOF:
         case OPT_ERR:
+ opthelp:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             goto end;
         case OPT_HELP:
@@ -107,19 +108,22 @@ int nseq_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
-    in = bio_open_default(infile, "r");
+    in = bio_open_default(infile, 'r', FORMAT_PEM);
     if (in == NULL)
         goto end;
-    out = bio_open_default(outfile, "w");
+    out = bio_open_default(outfile, 'w', FORMAT_PEM);
     if (out == NULL)
         goto end;
 
     if (toseq) {
         seq = NETSCAPE_CERT_SEQUENCE_new();
+        if (seq == NULL)
+            goto end;
         seq->certs = sk_X509_new_null();
-        if (!seq->certs)
+        if (seq->certs == NULL)
             goto end;
         while ((x509 = PEM_read_bio_X509(in, NULL, NULL, NULL)))
             sk_X509_push(seq->certs, x509);

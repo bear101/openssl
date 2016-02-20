@@ -1,4 +1,3 @@
-/* crypto/engine/eng_lib.c */
 /*
  * Written by Geoff Thorpe (geoff@geoffthorpe.net) for the OpenSSL project
  * 2000.
@@ -66,15 +65,14 @@ ENGINE *ENGINE_new(void)
 {
     ENGINE *ret;
 
-    ret = OPENSSL_malloc(sizeof(*ret));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ENGINEerr(ENGINE_F_ENGINE_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
     }
-    memset(ret, 0, sizeof(*ret));
     ret->struct_ref = 1;
-    engine_ref_debug(ret, 0, 1)
-        CRYPTO_new_ex_data(CRYPTO_EX_INDEX_ENGINE, ret, &ret->ex_data);
+    engine_ref_debug(ret, 0, 1);
+    CRYPTO_new_ex_data(CRYPTO_EX_INDEX_ENGINE, ret, &ret->ex_data);
     return ret;
 }
 
@@ -91,7 +89,6 @@ void engine_set_all_null(ENGINE *e)
     e->dsa_meth = NULL;
     e->dh_meth = NULL;
     e->rand_meth = NULL;
-    e->store_meth = NULL;
     e->ciphers = NULL;
     e->digests = NULL;
     e->destroy = NULL;
@@ -117,12 +114,7 @@ int engine_free_util(ENGINE *e, int locked)
     engine_ref_debug(e, 0, -1)
     if (i > 0)
         return 1;
-#ifdef REF_CHECK
-    if (i < 0) {
-        fprintf(stderr, "ENGINE_free, bad structural reference count\n");
-        abort();
-    }
-#endif
+    REF_ASSERT_ISNT(i < 0);
     /* Free up any dynamically allocated public key methods */
     engine_pkey_meths_free(e);
     engine_pkey_asn1_meths_free(e);
@@ -164,7 +156,7 @@ static int int_cleanup_check(int create)
 static ENGINE_CLEANUP_ITEM *int_cleanup_item(ENGINE_CLEANUP_CB *cb)
 {
     ENGINE_CLEANUP_ITEM *item = OPENSSL_malloc(sizeof(*item));
-    if (!item)
+    if (item == NULL)
         return NULL;
     item->cb = cb;
     return item;
@@ -212,14 +204,6 @@ void ENGINE_cleanup(void)
 }
 
 /* Now the "ex_data" support */
-
-int ENGINE_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
-                            CRYPTO_EX_dup *dup_func,
-                            CRYPTO_EX_free *free_func)
-{
-    return CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_ENGINE, argl, argp,
-                                   new_func, dup_func, free_func);
-}
 
 int ENGINE_set_ex_data(ENGINE *e, int idx, void *arg)
 {

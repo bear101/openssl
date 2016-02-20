@@ -1,4 +1,3 @@
-/* asn_mstbl.c */
 /*
  * Written by Stephen Henson (steve@openssl.org) for the OpenSSL project
  * 2012.
@@ -56,11 +55,11 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 
-/* Multi string module: add table enstries from a given section */
+/* Multi string module: add table entries from a given section */
 
 static int do_tcreate(char *value, char *name);
 
@@ -70,8 +69,9 @@ static int stbl_module_init(CONF_IMODULE *md, const CONF *cnf)
     const char *stbl_section;
     STACK_OF(CONF_VALUE) *sktmp;
     CONF_VALUE *mval;
+
     stbl_section = CONF_imodule_get_value(md);
-    if (!(sktmp = NCONF_get_section(cnf, stbl_section))) {
+    if ((sktmp = NCONF_get_section(cnf, stbl_section)) == NULL) {
         ASN1err(ASN1_F_STBL_MODULE_INIT, ASN1_R_ERROR_LOADING_SECTION);
         return 0;
     }

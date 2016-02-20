@@ -1,4 +1,3 @@
-/* crypto/asn1/asn1_lib.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,13 +57,12 @@
 
 #include <stdio.h>
 #include <limits.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 
 static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
                            int max);
 static void asn1_put_length(unsigned char **pp, int length);
-const char ASN1_version[] = "ASN.1" OPENSSL_VERSION_PTEXT;
 
 static int _asn1_check_infinite_end(const unsigned char **p, long len)
 {
@@ -285,7 +283,9 @@ int ASN1_STRING_copy(ASN1_STRING *dst, const ASN1_STRING *str)
     dst->type = str->type;
     if (!ASN1_STRING_set(dst, str->data, str->length))
         return 0;
-    dst->flags = str->flags;
+    /* Copy flags but preserve embed value */
+    dst->flags &= ASN1_STRING_FLAG_EMBED;
+    dst->flags |= str->flags & ~ASN1_STRING_FLAG_EMBED;
     return 1;
 }
 
@@ -295,7 +295,7 @@ ASN1_STRING *ASN1_STRING_dup(const ASN1_STRING *str)
     if (!str)
         return NULL;
     ret = ASN1_STRING_new();
-    if (!ret)
+    if (ret == NULL)
         return NULL;
     if (!ASN1_STRING_copy(ret, str)) {
         ASN1_STRING_free(ret);
@@ -349,15 +349,12 @@ ASN1_STRING *ASN1_STRING_type_new(int type)
 {
     ASN1_STRING *ret;
 
-    ret = OPENSSL_malloc(sizeof(*ret));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ASN1err(ASN1_F_ASN1_STRING_TYPE_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    ret->length = 0;
     ret->type = type;
-    ret->data = NULL;
-    ret->flags = 0;
     return (ret);
 }
 
@@ -367,7 +364,8 @@ void ASN1_STRING_free(ASN1_STRING *a)
         return;
     if (!(a->flags & ASN1_STRING_FLAG_NDEF))
         OPENSSL_free(a->data);
-    OPENSSL_free(a);
+    if (!(a->flags & ASN1_STRING_FLAG_EMBED))
+        OPENSSL_free(a);
 }
 
 void ASN1_STRING_clear_free(ASN1_STRING *a)

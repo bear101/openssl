@@ -1,4 +1,3 @@
-/* tasn_utl.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2000.
@@ -59,6 +58,7 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <internal/cryptlib.h>
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 #include <openssl/objects.h>
@@ -118,12 +118,9 @@ int asn1_do_lock(ASN1_VALUE **pval, int op, const ASN1_ITEM *it)
     }
     ret = CRYPTO_add(lck, op, aux->ref_lock);
 #ifdef REF_PRINT
-    fprintf(stderr, "%s: Reference Count: %d\n", it->sname, *lck);
+    fprintf(stderr, "%p:%4d:%s\n", it, *lck, it->sname);
 #endif
-#ifdef REF_CHECK
-    if (ret < 0)
-        fprintf(stderr, "%s, bad reference count\n", it->sname);
-#endif
+    REF_ASSERT_ISNT(ret < 0);
     return ret;
 }
 
@@ -171,7 +168,7 @@ int asn1_enc_save(ASN1_VALUE **pval, const unsigned char *in, int inlen,
 
     OPENSSL_free(enc->enc);
     enc->enc = OPENSSL_malloc(inlen);
-    if (!enc->enc)
+    if (enc->enc == NULL)
         return 0;
     memcpy(enc->enc, in, inlen);
     enc->len = inlen;

@@ -1,4 +1,3 @@
-/* crypto/bio/bf_buff.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,7 +57,7 @@
 
 #include <stdio.h>
 #include <errno.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 
 static int buffer_write(BIO *h, const char *buf, int num);
@@ -91,27 +90,23 @@ BIO_METHOD *BIO_f_buffer(void)
 
 static int buffer_new(BIO *bi)
 {
-    BIO_F_BUFFER_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
+    BIO_F_BUFFER_CTX *ctx = OPENSSL_zalloc(sizeof(*ctx));
 
     if (ctx == NULL)
         return (0);
+    ctx->ibuf_size = DEFAULT_BUFFER_SIZE;
     ctx->ibuf = OPENSSL_malloc(DEFAULT_BUFFER_SIZE);
     if (ctx->ibuf == NULL) {
         OPENSSL_free(ctx);
         return (0);
     }
+    ctx->obuf_size = DEFAULT_BUFFER_SIZE;
     ctx->obuf = OPENSSL_malloc(DEFAULT_BUFFER_SIZE);
     if (ctx->obuf == NULL) {
         OPENSSL_free(ctx->ibuf);
         OPENSSL_free(ctx);
         return (0);
     }
-    ctx->ibuf_size = DEFAULT_BUFFER_SIZE;
-    ctx->obuf_size = DEFAULT_BUFFER_SIZE;
-    ctx->ibuf_len = 0;
-    ctx->ibuf_off = 0;
-    ctx->obuf_len = 0;
-    ctx->obuf_off = 0;
 
     bi->init = 1;
     bi->ptr = (char *)ctx;

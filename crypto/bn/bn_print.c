@@ -1,4 +1,3 @@
-/* crypto/bn/bn_print.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,7 +57,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include "bn_lcl.h"
 
@@ -71,7 +70,12 @@ char *BN_bn2hex(const BIGNUM *a)
     char *buf;
     char *p;
 
-    buf = OPENSSL_malloc(a->top * BN_BYTES * 2 + 2);
+    if (a->neg && BN_is_zero(a)) {
+        /* "-0" == 3 bytes including NULL terminator */
+        buf = OPENSSL_malloc(3);
+    } else {
+        buf = OPENSSL_malloc(a->top * BN_BYTES * 2 + 2);
+    }
     if (buf == NULL) {
         BNerr(BN_F_BN_BN2HEX, ERR_R_MALLOC_FAILURE);
         goto err;

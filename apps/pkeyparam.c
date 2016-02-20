@@ -92,6 +92,7 @@ int pkeyparam_main(int argc, char **argv)
         switch (o) {
         case OPT_EOF:
         case OPT_ERR:
+ opthelp:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             goto end;
         case OPT_HELP:
@@ -116,12 +117,13 @@ int pkeyparam_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
-    in = bio_open_default(infile, "r");
+    in = bio_open_default(infile, 'r', FORMAT_PEM);
     if (in == NULL)
         goto end;
-    out = bio_open_default(outfile, "w");
+    out = bio_open_default(outfile, 'w', FORMAT_PEM);
     if (out == NULL)
         goto end;
     pkey = PEM_read_bio_Parameters(in, NULL);

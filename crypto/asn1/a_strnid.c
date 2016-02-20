@@ -1,4 +1,3 @@
-/* a_strnid.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -59,7 +58,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/objects.h>
 
@@ -192,7 +191,10 @@ static const ASN1_STRING_TABLE tbl_standard[] = {
     {NID_name, 1, ub_name, DIRSTRING_TYPE, 0},
     {NID_dnQualifier, -1, -1, B_ASN1_PRINTABLESTRING, STABLE_NO_MASK},
     {NID_domainComponent, 1, -1, B_ASN1_IA5STRING, STABLE_NO_MASK},
-    {NID_ms_csp_name, -1, -1, B_ASN1_BMPSTRING, STABLE_NO_MASK}
+    {NID_ms_csp_name, -1, -1, B_ASN1_BMPSTRING, STABLE_NO_MASK},
+    {NID_INN, 1, 12, B_ASN1_NUMERICSTRING, STABLE_NO_MASK},
+    {NID_OGRN, 1, 13, B_ASN1_NUMERICSTRING, STABLE_NO_MASK},
+    {NID_SNILS, 1, 11, B_ASN1_NUMERICSTRING, STABLE_NO_MASK}
 };
 
 static int sk_table_cmp(const ASN1_STRING_TABLE *const *a,
@@ -232,16 +234,16 @@ static ASN1_STRING_TABLE *stable_get(int nid)
 {
     ASN1_STRING_TABLE *tmp, *rv;
     /* Always need a string table so allocate one if NULL */
-    if (!stable) {
+    if (stable == NULL) {
         stable = sk_ASN1_STRING_TABLE_new(sk_table_cmp);
-        if (!stable)
+        if (stable == NULL)
             return NULL;
     }
     tmp = ASN1_STRING_TABLE_get(nid);
     if (tmp && tmp->flags & STABLE_FLAGS_MALLOC)
         return tmp;
     rv = OPENSSL_malloc(sizeof(*rv));
-    if (!rv)
+    if (rv == NULL)
         return NULL;
     if (!sk_ASN1_STRING_TABLE_push(stable, rv)) {
         OPENSSL_free(rv);

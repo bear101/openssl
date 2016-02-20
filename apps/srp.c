@@ -55,9 +55,12 @@
  * Hudson (tjh@cryptsoft.com).
  *
  */
-#include <openssl/opensslconf.h>
 
-#ifndef OPENSSL_NO_SRP
+#include <openssl/opensslconf.h>
+#ifdef OPENSSL_NO_SRP
+NON_EMPTY_TRANSLATION_UNIT
+#else
+
 # include <stdio.h>
 # include <stdlib.h>
 # include <string.h>
@@ -67,7 +70,6 @@
 # include <openssl/txt_db.h>
 # include <openssl/buffer.h>
 # include <openssl/srp.h>
-
 # include "apps.h"
 
 # define BASE_SECTION    "srp"
@@ -256,14 +258,13 @@ int srp_main(int argc, char **argv)
     CA_DB *db = NULL;
     DB_ATTR db_attr;
     CONF *conf = NULL;
-    int gNindex = -1, maxgN = -1, ret = 1, errors = 0, verbose =
-        0, i, doupdatedb = 0;
-    int mode = OPT_ERR;
+    int gNindex = -1, maxgN = -1, ret = 1, errors = 0, verbose = 0, i;
+    int doupdatedb = 0, mode = OPT_ERR;
     char *user = NULL, *passinarg = NULL, *passoutarg = NULL;
     char *passin = NULL, *passout = NULL, *gN = NULL, *userinfo = NULL;
     char *randfile = NULL, *tofree = NULL, *section = NULL;
-    char **gNrow = NULL, *configfile = NULL, *dbfile = NULL, **pp, *prog;
-    long errorline = -1;
+    char **gNrow = NULL, *configfile = NULL;
+    char *srpvfile = NULL, **pp, *prog;
     OPTION_CHOICE o;
 
     prog = opt_init(argc, argv, srp_options);
@@ -288,7 +289,7 @@ int srp_main(int argc, char **argv)
             section = opt_arg();
             break;
         case OPT_SRPVFILE:
-            dbfile = opt_arg();
+            srpvfile = opt_arg();
             break;
         case OPT_ADD:
         case OPT_DELETE:
@@ -322,9 +323,9 @@ int srp_main(int argc, char **argv)
     argc = opt_num_rest();
     argv = opt_rest();
 
-    if (dbfile && configfile) {
+    if (srpvfile && configfile) {
         BIO_printf(bio_err,
-                   "-dbfile and -configfile cannot be specified together.\n");
+                   "-srpvfile and -configfile cannot be specified together.\n");
         goto end;
     }
     if (mode == OPT_ERR) {
@@ -349,50 +350,25 @@ int srp_main(int argc, char **argv)
         goto end;
     }
 
-    if (!dbfile) {
-
-        /*****************************************************************/
-        tofree = NULL;
-        if (configfile == NULL)
-            configfile = getenv("OPENSSL_CONF");
-        if (configfile == NULL)
-            configfile = getenv("SSLEAY_CONF");
-        if (configfile == NULL) {
-            const char *s = X509_get_default_cert_area();
-            size_t len = strlen(s) + 1 + sizeof(CONFIG_FILE);
-
-            tofree = app_malloc(len, "config filename space");
-# ifdef OPENSSL_SYS_VMS
-            strcpy(tofree, s);
-# else
-            BUF_strlcpy(tofree, s, len);
-            BUF_strlcat(tofree, "/", len);
-# endif
-            BUF_strlcat(tofree, CONFIG_FILE, len);
-            configfile = tofree;
-        }
+    if (!srpvfile) {
+        if (!configfile)
+            configfile = default_config_file;
 
         if (verbose)
-            BIO_printf(bio_err, "Using configuration from %s\n", configfile);
-        conf = NCONF_new(NULL);
-        if (NCONF_load(conf, configfile, &errorline) <= 0) {
-            if (errorline <= 0)
-                BIO_printf(bio_err, "error loading the config file '%s'\n",
-                           configfile);
-            else
-                BIO_printf(bio_err, "error on line %ld of config file '%s'\n",
-                           errorline, configfile);
+            BIO_printf(bio_err, "Using configuration from %s\n",
+                       configfile);
+        conf = app_load_config(configfile);
+        if (conf == NULL)
             goto end;
-        }
-        OPENSSL_free(tofree);
-        tofree = NULL;
+        if (!app_load_modules(conf))
+            goto end;
 
         /* Lets get the config section we are using */
         if (section == NULL) {
             if (verbose)
                 BIO_printf(bio_err,
                            "trying to read " ENV_DEFAULT_SRP
-                           " in \" BASE_SECTION \"\n");
+                           " in " BASE_SECTION "\n");
 
             section = NCONF_get_string(conf, BASE_SECTION, ENV_DEFAULT_SRP);
             if (section == NULL) {
@@ -409,7 +385,8 @@ int srp_main(int argc, char **argv)
                        "trying to read " ENV_DATABASE " in section \"%s\"\n",
                        section);
 
-        if ((dbfile = NCONF_get_string(conf, section, ENV_DATABASE)) == NULL) {
+        if ((srpvfile = NCONF_get_string(conf, section, ENV_DATABASE))
+                == NULL) {
             lookup_fail(section, ENV_DATABASE);
             goto end;
         }
@@ -422,9 +399,9 @@ int srp_main(int argc, char **argv)
 
     if (verbose)
         BIO_printf(bio_err, "Trying to read SRP verifier file \"%s\"\n",
-                   dbfile);
+                   srpvfile);
 
-    db = load_index(dbfile, &db_attr);
+    db = load_index(srpvfile, &db_attr);
     if (db == NULL)
         goto end;
 
@@ -512,14 +489,17 @@ int srp_main(int argc, char **argv)
                     errors++;
                     goto end;
                 }
-                row[DB_srpid] = BUF_strdup(user);
-                row[DB_srptype] = BUF_strdup("v");
-                row[DB_srpgN] = BUF_strdup(gNid);
+                row[DB_srpid] = OPENSSL_strdup(user);
+                row[DB_srptype] = OPENSSL_strdup("v");
+                row[DB_srpgN] = OPENSSL_strdup(gNid);
 
-                if (!row[DB_srpid] || !row[DB_srpgN] || !row[DB_srptype]
-                    || !row[DB_srpverifier] || !row[DB_srpsalt]
-                    || (userinfo &&
-                         (!(row [DB_srpinfo] = BUF_strdup (userinfo))))
+                if ((row[DB_srpid] == NULL)
+                    || (row[DB_srpgN] == NULL)
+                    || (row[DB_srptype] == NULL)
+                    || (row[DB_srpverifier] == NULL)
+                    || (row[DB_srpsalt] == NULL)
+                    || (userinfo
+                        && ((row[DB_srpinfo] = OPENSSL_strdup(userinfo)) == NULL))
                     || !update_index(db, row)) {
                     OPENSSL_free(row[DB_srpid]);
                     OPENSSL_free(row[DB_srpgN]);
@@ -594,12 +574,16 @@ int srp_main(int argc, char **argv)
                     }
 
                     row[DB_srptype][0] = 'v';
-                    row[DB_srpgN] = BUF_strdup(gNid);
+                    row[DB_srpgN] = OPENSSL_strdup(gNid);
 
-                    if (!row[DB_srpid] || !row[DB_srpgN] || !row[DB_srptype]
-                        || !row[DB_srpverifier] || !row[DB_srpsalt]
+                    if (row[DB_srpid] == NULL
+                        || row[DB_srpgN] == NULL
+                        || row[DB_srptype] == NULL
+                        || row[DB_srpverifier] == NULL
+                        || row[DB_srpsalt] == NULL
                         || (userinfo
-                            && (!(row[DB_srpinfo] = BUF_strdup(userinfo)))))
+                            && ((row[DB_srpinfo] = OPENSSL_strdup(userinfo))
+                                == NULL)))
                         goto end;
 
                     doupdatedb = 1;
@@ -612,12 +596,10 @@ int srp_main(int argc, char **argv)
                            user);
                 errors++;
             } else {
-                char **xpp =
-                    sk_OPENSSL_PSTRING_value(db->db->data, userindex);
+                char **xpp = sk_OPENSSL_PSTRING_value(db->db->data, userindex);
+
                 BIO_printf(bio_err, "user \"%s\" revoked. t\n", user);
-
                 xpp[DB_srptype][0] = 'R';
-
                 doupdatedb = 1;
             }
         }
@@ -644,12 +626,12 @@ int srp_main(int argc, char **argv)
 
         if (verbose)
             BIO_printf(bio_err, "Trying to update srpvfile.\n");
-        if (!save_index(dbfile, "new", db))
+        if (!save_index(srpvfile, "new", db))
             goto end;
 
         if (verbose)
             BIO_printf(bio_err, "Temporary srpvfile created.\n");
-        if (!rotate_index(dbfile, "new", "old"))
+        if (!rotate_index(srpvfile, "new", "old"))
             goto end;
 
         if (verbose)
@@ -674,5 +656,4 @@ int srp_main(int argc, char **argv)
     OBJ_cleanup();
     return (ret);
 }
-
 #endif

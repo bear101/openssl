@@ -1,4 +1,3 @@
-/* crypto/srp/srp_vfy.c */
 /*
  * Written by Christophe Renou (christophe.renou@edelweb.fr) with the
  * precious help of Peter Sylvester (peter.sylvester@edelweb.fr) for the
@@ -58,7 +57,7 @@
  *
  */
 #ifndef OPENSSL_NO_SRP
-# include "cryptlib.h"
+# include "internal/cryptlib.h"
 # include <openssl/sha.h>
 # include <openssl/srp.h>
 # include <openssl/evp.h>
@@ -220,9 +219,9 @@ static void SRP_user_pwd_set_gN(SRP_user_pwd *vinfo, const BIGNUM *g,
 static int SRP_user_pwd_set_ids(SRP_user_pwd *vinfo, const char *id,
                                 const char *info)
 {
-    if (id != NULL && NULL == (vinfo->id = BUF_strdup(id)))
+    if (id != NULL && NULL == (vinfo->id = OPENSSL_strdup(id)))
         return 0;
-    return (info == NULL || NULL != (vinfo->info = BUF_strdup(info)));
+    return (info == NULL || NULL != (vinfo->info = OPENSSL_strdup(info)));
 }
 
 static int SRP_user_pwd_set_sv(SRP_user_pwd *vinfo, const char *s,
@@ -253,15 +252,15 @@ SRP_VBASE *SRP_VBASE_new(char *seed_key)
 
     if (vb == NULL)
         return NULL;
-    if (!(vb->users_pwd = sk_SRP_user_pwd_new_null()) ||
-        !(vb->gN_cache = sk_SRP_gN_cache_new_null())) {
+    if ((vb->users_pwd = sk_SRP_user_pwd_new_null()) == NULL
+        || (vb->gN_cache = sk_SRP_gN_cache_new_null()) == NULL) {
         OPENSSL_free(vb);
         return NULL;
     }
     vb->default_g = NULL;
     vb->default_N = NULL;
     vb->seed_key = NULL;
-    if ((seed_key != NULL) && (vb->seed_key = BUF_strdup(seed_key)) == NULL) {
+    if ((seed_key != NULL) && (vb->seed_key = OPENSSL_strdup(seed_key)) == NULL) {
         sk_SRP_user_pwd_free(vb->users_pwd);
         sk_SRP_gN_cache_free(vb->gN_cache);
         OPENSSL_free(vb);
@@ -289,7 +288,7 @@ static SRP_gN_cache *SRP_gN_new_init(const char *ch)
     if (newgN == NULL)
         return NULL;
 
-    if ((newgN->b64_bn = BUF_strdup(ch)) == NULL)
+    if ((newgN->b64_bn = OPENSSL_strdup(ch)) == NULL)
         goto err;
 
     len = t_fromb64(tmp, ch);
@@ -394,10 +393,11 @@ int SRP_VBASE_init(SRP_VBASE *vb, char *verifier_file)
             if ((gN = OPENSSL_malloc(sizeof(*gN))) == NULL)
                 goto err;
 
-            if (!(gN->id = BUF_strdup(pp[DB_srpid]))
-                || !(gN->N =
-                     SRP_gN_place_bn(vb->gN_cache, pp[DB_srpverifier]))
-                || !(gN->g = SRP_gN_place_bn(vb->gN_cache, pp[DB_srpsalt]))
+            if ((gN->id = OPENSSL_strdup(pp[DB_srpid])) == NULL
+                || (gN->N = SRP_gN_place_bn(vb->gN_cache, pp[DB_srpverifier]))
+                        == NULL
+                || (gN->g = SRP_gN_place_bn(vb->gN_cache, pp[DB_srpsalt]))
+                        == NULL
                 || sk_SRP_gN_insert(SRP_gN_tab, gN, 0) == 0)
                 goto err;
 
@@ -473,7 +473,7 @@ SRP_user_pwd *SRP_VBASE_get_by_user(SRP_VBASE *vb, char *username)
     SRP_user_pwd *user;
     unsigned char digv[SHA_DIGEST_LENGTH];
     unsigned char digs[SHA_DIGEST_LENGTH];
-    EVP_MD_CTX ctxt;
+    EVP_MD_CTX *ctxt = NULL;
 
     if (vb == NULL)
         return NULL;
@@ -498,18 +498,20 @@ SRP_user_pwd *SRP_VBASE_get_by_user(SRP_VBASE *vb, char *username)
 
     if (RAND_bytes(digv, SHA_DIGEST_LENGTH) <= 0)
         goto err;
-    EVP_MD_CTX_init(&ctxt);
-    EVP_DigestInit_ex(&ctxt, EVP_sha1(), NULL);
-    EVP_DigestUpdate(&ctxt, vb->seed_key, strlen(vb->seed_key));
-    EVP_DigestUpdate(&ctxt, username, strlen(username));
-    EVP_DigestFinal_ex(&ctxt, digs, NULL);
-    EVP_MD_CTX_cleanup(&ctxt);
-    if (SRP_user_pwd_set_sv_BN
-        (user, BN_bin2bn(digs, SHA_DIGEST_LENGTH, NULL),
-         BN_bin2bn(digv, SHA_DIGEST_LENGTH, NULL)))
+    ctxt = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(ctxt, EVP_sha1(), NULL);
+    EVP_DigestUpdate(ctxt, vb->seed_key, strlen(vb->seed_key));
+    EVP_DigestUpdate(ctxt, username, strlen(username));
+    EVP_DigestFinal_ex(ctxt, digs, NULL);
+    EVP_MD_CTX_free(ctxt);
+    ctxt = NULL;
+    if (SRP_user_pwd_set_sv_BN(user,
+                               BN_bin2bn(digs, SHA_DIGEST_LENGTH, NULL),
+                               BN_bin2bn(digv, SHA_DIGEST_LENGTH, NULL)))
         return user;
 
  err:
+    EVP_MD_CTX_free(ctxt);
     SRP_user_pwd_free(user);
     return NULL;
 }
@@ -521,22 +523,22 @@ char *SRP_create_verifier(const char *user, const char *pass, char **salt,
                           char **verifier, const char *N, const char *g)
 {
     int len;
-    char *result = NULL;
-    char *vf;
+    char *result = NULL, *vf = NULL;
     BIGNUM *N_bn = NULL, *g_bn = NULL, *s = NULL, *v = NULL;
     unsigned char tmp[MAX_LEN];
     unsigned char tmp2[MAX_LEN];
     char *defgNid = NULL;
+    int vfsize = 0;
 
     if ((user == NULL) ||
         (pass == NULL) || (salt == NULL) || (verifier == NULL))
         goto err;
 
     if (N) {
-        if (!(len = t_fromb64(tmp, N)))
+        if ((len = t_fromb64(tmp, N)) == 0)
             goto err;
         N_bn = BN_bin2bn(tmp, len, NULL);
-        if (!(len = t_fromb64(tmp, g)))
+        if ((len = t_fromb64(tmp, g)) == 0)
             goto err;
         g_bn = BN_bin2bn(tmp, len, NULL);
         defgNid = "*";
@@ -555,7 +557,7 @@ char *SRP_create_verifier(const char *user, const char *pass, char **salt,
 
         s = BN_bin2bn(tmp2, SRP_RANDOM_SALT_LEN, NULL);
     } else {
-        if (!(len = t_fromb64(tmp2, *salt)))
+        if ((len = t_fromb64(tmp2, *salt)) == 0)
             goto err;
         s = BN_bin2bn(tmp2, len, NULL);
     }
@@ -564,22 +566,23 @@ char *SRP_create_verifier(const char *user, const char *pass, char **salt,
         goto err;
 
     BN_bn2bin(v, tmp);
-    if (((vf = OPENSSL_malloc(BN_num_bytes(v) * 2)) == NULL))
+    vfsize = BN_num_bytes(v) * 2;
+    if (((vf = OPENSSL_malloc(vfsize)) == NULL))
         goto err;
     t_tob64(vf, tmp, BN_num_bytes(v));
 
-    *verifier = vf;
     if (*salt == NULL) {
         char *tmp_salt;
 
         if ((tmp_salt = OPENSSL_malloc(SRP_RANDOM_SALT_LEN * 2)) == NULL) {
-            OPENSSL_free(vf);
             goto err;
         }
         t_tob64(tmp_salt, tmp2, SRP_RANDOM_SALT_LEN);
         *salt = tmp_salt;
     }
 
+    *verifier = vf;
+    vf = NULL;
     result = defgNid;
 
  err:
@@ -587,11 +590,20 @@ char *SRP_create_verifier(const char *user, const char *pass, char **salt,
         BN_free(N_bn);
         BN_free(g_bn);
     }
+    OPENSSL_clear_free(vf, vfsize);
+    BN_clear_free(s);
+    BN_clear_free(v);
     return result;
 }
 
 /*
- * create a verifier (*salt,*verifier,g and N are BIGNUMs)
+ * create a verifier (*salt,*verifier,g and N are BIGNUMs). If *salt != NULL
+ * then the provided salt will be used. On successful exit *verifier will point
+ * to a newly allocated BIGNUM containing the verifier and (if a salt was not
+ * provided) *salt will be populated with a newly allocated BIGNUM containing a
+ * random salt.
+ * The caller is responsible for freeing the allocated *salt and *verifier
+ * BIGNUMS.
  */
 int SRP_create_verifier_BN(const char *user, const char *pass, BIGNUM **salt,
                            BIGNUM **verifier, const BIGNUM *N,
@@ -601,6 +613,7 @@ int SRP_create_verifier_BN(const char *user, const char *pass, BIGNUM **salt,
     BIGNUM *x = NULL;
     BN_CTX *bn_ctx = BN_CTX_new();
     unsigned char tmp2[MAX_LEN];
+    BIGNUM *salttmp = NULL;
 
     if ((user == NULL) ||
         (pass == NULL) ||
@@ -612,10 +625,12 @@ int SRP_create_verifier_BN(const char *user, const char *pass, BIGNUM **salt,
         if (RAND_bytes(tmp2, SRP_RANDOM_SALT_LEN) <= 0)
             goto err;
 
-        *salt = BN_bin2bn(tmp2, SRP_RANDOM_SALT_LEN, NULL);
+        salttmp = BN_bin2bn(tmp2, SRP_RANDOM_SALT_LEN, NULL);
+    } else {
+        salttmp = *salt;
     }
 
-    x = SRP_Calc_x(*salt, user, pass);
+    x = SRP_Calc_x(salttmp, user, pass);
 
     *verifier = BN_new();
     if (*verifier == NULL)
@@ -627,9 +642,11 @@ int SRP_create_verifier_BN(const char *user, const char *pass, BIGNUM **salt,
     }
 
     result = 1;
+    *salt = salttmp;
 
  err:
-
+    if (salt != NULL && *salt != salttmp)
+        BN_clear_free(salttmp);
     BN_clear_free(x);
     BN_CTX_free(bn_ctx);
     return result;

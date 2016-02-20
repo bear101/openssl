@@ -56,7 +56,10 @@
  */
 
 #include <openssl/opensslconf.h>
-#ifndef OPENSSL_NO_EC
+#ifdef OPENSSL_NO_EC
+NON_EMPTY_TRANSLATION_UNIT
+#else
+
 # include <stdio.h>
 # include <stdlib.h>
 # include <string.h>
@@ -83,7 +86,8 @@ typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_INFORM, OPT_OUTFORM, OPT_ENGINE, OPT_IN, OPT_OUT,
     OPT_NOOUT, OPT_TEXT, OPT_PARAM_OUT, OPT_PUBIN, OPT_PUBOUT,
-    OPT_PASSIN, OPT_PASSOUT, OPT_PARAM_ENC, OPT_CONV_FORM, OPT_CIPHER
+    OPT_PASSIN, OPT_PASSOUT, OPT_PARAM_ENC, OPT_CONV_FORM, OPT_CIPHER,
+    OPT_NO_PUBLIC, OPT_CHECK
 } OPTION_CHOICE;
 
 OPTIONS ec_options[] = {
@@ -92,20 +96,22 @@ OPTIONS ec_options[] = {
     {"inform", OPT_INFORM, 'F', "Input format - DER or PEM"},
     {"out", OPT_OUT, '>', "Output file"},
     {"outform", OPT_OUTFORM, 'F', "Output format - DER or PEM"},
-# ifndef OPENSSL_NO_ENGINE
-    {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
-# endif
     {"noout", OPT_NOOUT, '-', "Don't print key out"},
     {"text", OPT_TEXT, '-', "Print the key"},
     {"param_out", OPT_PARAM_OUT, '-', "Print the elliptic curve parameters"},
     {"pubin", OPT_PUBIN, '-'},
     {"pubout", OPT_PUBOUT, '-'},
+    {"no_public", OPT_NO_PUBLIC, '-', "exclude public key from private key"},
+    {"check", OPT_CHECK, '-', "check key consistency"},
     {"passin", OPT_PASSIN, 's', "Input file pass phrase source"},
     {"passout", OPT_PASSOUT, 's', "Output file pass phrase source"},
     {"param_enc", OPT_PARAM_ENC, 's',
      "Specifies the way the ec parameters are encoded"},
     {"conv_form", OPT_CONV_FORM, 's', "Specifies the point conversion form "},
     {"", OPT_CIPHER, '-', "Any supported cipher"},
+# ifndef OPENSSL_NO_ENGINE
+    {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
+# endif
     {NULL}
 };
 
@@ -121,7 +127,8 @@ int ec_main(int argc, char **argv)
     OPTION_CHOICE o;
     int asn1_flag = OPENSSL_EC_NAMED_CURVE, new_form = 0, new_asn1_flag = 0;
     int informat = FORMAT_PEM, outformat = FORMAT_PEM, text = 0, noout = 0;
-    int pubin = 0, pubout = 0, param_out = 0, i, ret = 1;
+    int pubin = 0, pubout = 0, param_out = 0, i, ret = 1, private = 0;
+    int no_public = 0, check = 0;
 
     prog = opt_init(argc, argv, ec_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -176,6 +183,7 @@ int ec_main(int argc, char **argv)
         case OPT_CIPHER:
             if (!opt_cipher(opt_unknown(), &enc))
                 goto opthelp;
+            break;
         case OPT_CONV_FORM:
             if (!opt_pair(opt_arg(), conv_forms, &i))
                 goto opthelp;
@@ -188,17 +196,28 @@ int ec_main(int argc, char **argv)
             new_asn1_flag = 1;
             asn1_flag = i;
             break;
+        case OPT_NO_PUBLIC:
+            no_public = 1;
+            break;
+        case OPT_CHECK:
+            check = 1;
+            break;
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
+
+    private = param_out || pubin || pubout ? 0 : 1;
+    if (text && !pubin)
+        private = 1;
 
     if (!app_passwd(passinarg, passoutarg, &passin, &passout)) {
         BIO_printf(bio_err, "Error getting passwords\n");
         goto end;
     }
 
-    in = bio_open_default(infile, RB(informat));
+    in = bio_open_default(infile, 'r', informat);
     if (in == NULL)
         goto end;
 
@@ -220,7 +239,7 @@ int ec_main(int argc, char **argv)
         goto end;
     }
 
-    out = bio_open_default(outfile, WB(outformat));
+    out = bio_open_owner(outfile, outformat, private);
     if (out == NULL)
         goto end;
 
@@ -232,12 +251,26 @@ int ec_main(int argc, char **argv)
     if (new_asn1_flag)
         EC_KEY_set_asn1_flag(eckey, asn1_flag);
 
-    if (text)
+    if (no_public)
+        EC_KEY_set_enc_flags(eckey, EC_PKEY_NO_PUBKEY);
+
+    if (text) {
+        assert(pubin || private);
         if (!EC_KEY_print(out, eckey, 0)) {
             perror(outfile);
             ERR_print_errors(bio_err);
             goto end;
         }
+    }
+
+    if (check) {
+        if (EC_KEY_check_key(eckey) == 1) {
+            BIO_printf(bio_err, "EC Key valid.\n");
+        } else {
+            BIO_printf(bio_err, "EC Key Invalid!\n");
+            ERR_print_errors(bio_err);
+        }
+    }
 
     if (noout) {
         ret = 0;
@@ -250,16 +283,20 @@ int ec_main(int argc, char **argv)
             i = i2d_ECPKParameters_bio(out, group);
         else if (pubin || pubout)
             i = i2d_EC_PUBKEY_bio(out, eckey);
-        else
+        else {
+            assert(private);
             i = i2d_ECPrivateKey_bio(out, eckey);
+        }
     } else {
         if (param_out)
             i = PEM_write_bio_ECPKParameters(out, group);
         else if (pubin || pubout)
             i = PEM_write_bio_EC_PUBKEY(out, eckey);
-        else
+        else {
+            assert(private);
             i = PEM_write_bio_ECPrivateKey(out, eckey, enc,
                                            NULL, 0, NULL, passout);
+        }
     }
 
     if (!i) {
@@ -275,10 +312,4 @@ int ec_main(int argc, char **argv)
     OPENSSL_free(passout);
     return (ret);
 }
-#else                           /* !OPENSSL_NO_EC */
-
-# if PEDANTIC
-static void *dummy = &dummy;
-# endif
-
 #endif

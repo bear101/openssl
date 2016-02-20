@@ -277,19 +277,21 @@ static int test_EVP_DigestSignInit(void)
     EVP_PKEY *pkey = NULL;
     unsigned char *sig = NULL;
     size_t sig_len = 0;
-    EVP_MD_CTX md_ctx, md_ctx_verify;
+    EVP_MD_CTX *md_ctx, *md_ctx_verify;
 
-    EVP_MD_CTX_init(&md_ctx);
-    EVP_MD_CTX_init(&md_ctx_verify);
+    md_ctx = EVP_MD_CTX_new();
+    md_ctx_verify = EVP_MD_CTX_new();
+    if (md_ctx == NULL || md_ctx_verify == NULL)
+        goto out;
 
     pkey = load_example_rsa_key();
     if (pkey == NULL ||
-        !EVP_DigestSignInit(&md_ctx, NULL, EVP_sha256(), NULL, pkey) ||
-        !EVP_DigestSignUpdate(&md_ctx, kMsg, sizeof(kMsg))) {
+        !EVP_DigestSignInit(md_ctx, NULL, EVP_sha256(), NULL, pkey) ||
+        !EVP_DigestSignUpdate(md_ctx, kMsg, sizeof(kMsg))) {
         goto out;
     }
     /* Determine the size of the signature. */
-    if (!EVP_DigestSignFinal(&md_ctx, NULL, &sig_len)) {
+    if (!EVP_DigestSignFinal(md_ctx, NULL, &sig_len)) {
         goto out;
     }
     /* Sanity check for testing. */
@@ -299,14 +301,14 @@ static int test_EVP_DigestSignInit(void)
     }
 
     sig = OPENSSL_malloc(sig_len);
-    if (sig == NULL || !EVP_DigestSignFinal(&md_ctx, sig, &sig_len)) {
+    if (sig == NULL || !EVP_DigestSignFinal(md_ctx, sig, &sig_len)) {
         goto out;
     }
 
     /* Ensure that the signature round-trips. */
-    if (!EVP_DigestVerifyInit(&md_ctx_verify, NULL, EVP_sha256(), NULL, pkey)
-        || !EVP_DigestVerifyUpdate(&md_ctx_verify, kMsg, sizeof(kMsg))
-        || !EVP_DigestVerifyFinal(&md_ctx_verify, sig, sig_len)) {
+    if (!EVP_DigestVerifyInit(md_ctx_verify, NULL, EVP_sha256(), NULL, pkey)
+        || !EVP_DigestVerifyUpdate(md_ctx_verify, kMsg, sizeof(kMsg))
+        || !EVP_DigestVerifyFinal(md_ctx_verify, sig, sig_len)) {
         goto out;
     }
 
@@ -317,8 +319,8 @@ static int test_EVP_DigestSignInit(void)
         ERR_print_errors_fp(stderr);
     }
 
-    EVP_MD_CTX_cleanup(&md_ctx);
-    EVP_MD_CTX_cleanup(&md_ctx_verify);
+    EVP_MD_CTX_free(md_ctx);
+    EVP_MD_CTX_free(md_ctx_verify);
     EVP_PKEY_free(pkey);
     OPENSSL_free(sig);
 
@@ -329,15 +331,15 @@ static int test_EVP_DigestVerifyInit(void)
 {
     int ret = 0;
     EVP_PKEY *pkey = NULL;
-    EVP_MD_CTX md_ctx;
+    EVP_MD_CTX *md_ctx;
 
-    EVP_MD_CTX_init(&md_ctx);
+    md_ctx = EVP_MD_CTX_new();
 
     pkey = load_example_rsa_key();
     if (pkey == NULL ||
-        !EVP_DigestVerifyInit(&md_ctx, NULL, EVP_sha256(), NULL, pkey) ||
-        !EVP_DigestVerifyUpdate(&md_ctx, kMsg, sizeof(kMsg)) ||
-        !EVP_DigestVerifyFinal(&md_ctx, kSignature, sizeof(kSignature))) {
+        !EVP_DigestVerifyInit(md_ctx, NULL, EVP_sha256(), NULL, pkey) ||
+        !EVP_DigestVerifyUpdate(md_ctx, kMsg, sizeof(kMsg)) ||
+        !EVP_DigestVerifyFinal(md_ctx, kSignature, sizeof(kSignature))) {
         goto out;
     }
     ret = 1;
@@ -347,7 +349,7 @@ static int test_EVP_DigestVerifyInit(void)
         ERR_print_errors_fp(stderr);
     }
 
-    EVP_MD_CTX_cleanup(&md_ctx);
+    EVP_MD_CTX_free(md_ctx);
     EVP_PKEY_free(pkey);
 
     return ret;
@@ -417,14 +419,9 @@ static int test_EVP_PKCS82PKEY(void)
 
 int main(void)
 {
-    CRYPTO_malloc_debug_init();
-    CRYPTO_set_mem_debug_options(V_CRYPTO_MDEBUG_ALL);
+    CRYPTO_set_mem_debug(1);
     CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
 
-    ERR_load_crypto_strings();
-    /* Load up the software EVP_CIPHER and EVP_MD definitions */
-    OpenSSL_add_all_ciphers();
-    OpenSSL_add_all_digests();
 
     if (!test_EVP_DigestSignInit()) {
         fprintf(stderr, "EVP_DigestSignInit failed\n");
@@ -461,11 +458,10 @@ int main(void)
     }
 #endif
 
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    ERR_free_strings();
-    CRYPTO_mem_leaks_fp(stderr);
+#ifndef OPENSSL_NO_CRYPTO_MDEBUG
+    if (CRYPTO_mem_leaks_fp(stderr) <= 0)
+        return 1;
+#endif
 
     printf("PASS\n");
     return 0;

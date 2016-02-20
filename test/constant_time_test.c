@@ -1,4 +1,3 @@
-/* crypto/constant_time_test.c */
 /*-
  * Utilities for constant-time cryptography.
  *
@@ -44,7 +43,8 @@
  * [including the GNU Public Licence.]
  */
 
-#include "../crypto/constant_time_locl.h"
+#include "internal/constant_time_locl.h"
+#include "e_os.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
     }
 
     if (!num_failed) {
-        fprintf(stdout, "ok (ran %d tests)\n", num_all);
+        fprintf(stdout, "success (ran %d tests)\n", num_all);
         return EXIT_SUCCESS;
     } else {
         fprintf(stdout, "%d of %d tests failed!\n", num_failed, num_all);

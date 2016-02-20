@@ -75,7 +75,7 @@ OPTIONS pkey_options[] = {
     {"outform", OPT_OUTFORM, 'F', "Output format (DER or PEM)"},
     {"passin", OPT_PASSIN, 's', "Input file pass phrase source"},
     {"passout", OPT_PASSOUT, 's', "Output file pass phrase source"},
-    {"in", OPT_IN, '<', "Input file"},
+    {"in", OPT_IN, 's', "Input key"},
     {"out", OPT_OUT, '>', "Output file"},
     {"pubin", OPT_PUBIN, '-',
      "Read public key from input (default is private key)"},
@@ -101,6 +101,7 @@ int pkey_main(int argc, char **argv)
     OPTION_CHOICE o;
     int informat = FORMAT_PEM, outformat = FORMAT_PEM;
     int pubin = 0, pubout = 0, pubtext = 0, text = 0, noout = 0, ret = 1;
+    int private = 0;
 
     prog = opt_init(argc, argv, pkey_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -115,7 +116,7 @@ int pkey_main(int argc, char **argv)
             ret = 0;
             goto end;
         case OPT_INFORM:
-            if (!opt_format(opt_arg(), OPT_FMT_PEMDER, &informat))
+            if (!opt_format(opt_arg(), OPT_FMT_ANY, &informat))
                 goto opthelp;
             break;
         case OPT_OUTFORM:
@@ -158,14 +159,19 @@ int pkey_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
+
+    private = !noout && !pubout ? 1 : 0;
+    if (text && !pubtext)
+        private = 1;
 
     if (!app_passwd(passinarg, passoutarg, &passin, &passout)) {
         BIO_printf(bio_err, "Error getting passwords\n");
         goto end;
     }
 
-    out = bio_open_default(outfile, "wb");
+    out = bio_open_owner(outfile, outformat, private);
     if (out == NULL)
         goto end;
 
@@ -180,14 +186,18 @@ int pkey_main(int argc, char **argv)
         if (outformat == FORMAT_PEM) {
             if (pubout)
                 PEM_write_bio_PUBKEY(out, pkey);
-            else
+            else {
+                assert(private);
                 PEM_write_bio_PrivateKey(out, pkey, cipher,
                                          NULL, 0, NULL, passout);
+            }
         } else if (outformat == FORMAT_ASN1) {
             if (pubout)
                 i2d_PUBKEY_bio(out, pkey);
-            else
+            else {
+                assert(private);
                 i2d_PrivateKey_bio(out, pkey);
+            }
         } else {
             BIO_printf(bio_err, "Bad format specified for key\n");
             goto end;
@@ -198,8 +208,10 @@ int pkey_main(int argc, char **argv)
     if (text) {
         if (pubtext)
             EVP_PKEY_print_public(out, pkey, 0, NULL);
-        else
+        else {
+            assert(private);
             EVP_PKEY_print_private(out, pkey, 0, NULL);
+        }
     }
 
     ret = 0;

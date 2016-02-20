@@ -122,12 +122,15 @@
 #ifndef OPENSSL_NO_ENGINE
 # include <openssl/engine.h>
 #endif
-/* needed for the _O_BINARY defs in the MS world */
-#define USE_SOCKETS
-#include "s_apps.h"
 #include <openssl/err.h>
 #ifdef OPENSSL_FIPS
 # include <openssl/fips.h>
+#endif
+#define USE_SOCKETS /* needed for the _O_BINARY defs in the MS world */
+#include "s_apps.h"
+/* Needed to get the other O_xxx flags. */
+#ifdef OPENSSL_SYS_VMS
+# include <unixio.h>
 #endif
 #define INCLUDE_FUNCTION_TABLE
 #include "apps.h"
@@ -150,90 +153,58 @@
  * required type of "FUNCTION*"). This removes the necessity for
  * macro-generated wrapper functions.
  */
-DECLARE_LHASH_OF(FUNCTION);
 static LHASH_OF(FUNCTION) *prog_init(void);
 static int do_cmd(LHASH_OF(FUNCTION) *prog, int argc, char *argv[]);
 static void list_pkey(void);
 static void list_type(FUNC_TYPE ft);
+static void list_disabled(void);
 char *default_config_file = NULL;
 
-CONF *config = NULL;
+static CONF *config = NULL;
 BIO *bio_in = NULL;
 BIO *bio_out = NULL;
 BIO *bio_err = NULL;
 
-static void apps_startup()
+static int apps_startup()
 {
 #ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
 #endif
-    CRYPTO_malloc_init();
-    ERR_load_crypto_strings();
-    ERR_load_SSL_strings();
-    OpenSSL_add_all_algorithms();
-    OpenSSL_add_ssl_algorithms();
+
+    /* Set non-default library initialisation settings */
+    if (!OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_ALL_BUILTIN
+                             | OPENSSL_INIT_LOAD_CONFIG, NULL))
+        return 0;
+
     setup_ui_method();
-    /*SSL_library_init();*/
-#ifndef OPENSSL_NO_ENGINE
-    ENGINE_load_builtin_engines();
-#endif
+
+    return 1;
 }
 
 static void apps_shutdown()
 {
-#ifndef OPENSSL_NO_ENGINE
-    ENGINE_cleanup();
-#endif
     destroy_ui_method();
-    CONF_modules_unload(1);
-#ifndef OPENSSL_NO_COMP
-    COMP_zlib_cleanup();
-#endif
-    OBJ_cleanup();
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    RAND_cleanup();
-    ERR_free_strings();
 }
 
 static char *make_config_name()
 {
-    const char *t = X509_get_default_cert_area();
+    const char *t;
     size_t len;
     char *p;
 
-    len = strlen(t) + strlen(OPENSSL_CONF) + 2;
+    if ((t = getenv("OPENSSL_CONF")) != NULL)
+        return OPENSSL_strdup(t);
+
+    t = X509_get_default_cert_area();
+    len = strlen(t) + 1 + strlen(OPENSSL_CONF) + 1;
     p = app_malloc(len, "config filename buffer");
-    BUF_strlcpy(p, t, len);
+    strcpy(p, t);
 #ifndef OPENSSL_SYS_VMS
-    BUF_strlcat(p, "/", len);
+    strcat(p, "/");
 #endif
-    BUF_strlcat(p, OPENSSL_CONF, len);
+    strcat(p, OPENSSL_CONF);
 
     return p;
-}
-
-static int load_config(CONF *cnf)
-{
-    static int load_config_called = 0;
-
-    if (load_config_called)
-        return 1;
-    load_config_called = 1;
-    if (!cnf)
-        cnf = config;
-    if (!cnf)
-        return 1;
-
-    OPENSSL_load_builtin_modules();
-
-    if (CONF_modules_load(cnf, NULL, 0) <= 0) {
-        BIO_printf(bio_err, "Error configuring OpenSSL\n");
-        ERR_print_errors(bio_err);
-        return 0;
-    }
-    return 1;
 }
 
 static void lock_dbg_cb(int mode, int type, const char *file, int line)
@@ -279,54 +250,10 @@ static void lock_dbg_cb(int mode, int type, const char *file, int line)
 
  err:
     if (errstr) {
-        /* we cannot use bio_err here */
-        fprintf(stderr,
-                "openssl (lock_dbg_cb): %s (mode=%d, type=%d) at %s:%d\n",
-                errstr, mode, type, file, line);
-    }
-}
-
-BIO *dup_bio_in(void)
-{
-    return BIO_new_fp(stdin, BIO_NOCLOSE | BIO_FP_TEXT);
-}
-
-BIO *dup_bio_out(void)
-{
-    BIO *b = BIO_new_fp(stdout, BIO_NOCLOSE | BIO_FP_TEXT);
-#ifdef OPENSSL_SYS_VMS
-    b = BIO_push(BIO_new(BIO_f_linebuffer()), b);
-#endif
-    return b;
-}
-
-void unbuffer(FILE *fp)
-{
-    setbuf(fp, NULL);
-}
-
-BIO *bio_open_default(const char *filename, const char *mode)
-{
-    BIO *ret;
-
-    if (filename == NULL || strcmp(filename, "-") == 0) {
-        ret = *mode == 'r' ? dup_bio_in() : dup_bio_out();
-        if (ret != NULL)
-            return ret;
         BIO_printf(bio_err,
-                   "Can't open %s, %s\n",
-                   *mode == 'r' ? "stdin" : "stdout", strerror(errno));
-    } else {
-        ret = BIO_new_file(filename, mode);
-        if (ret != NULL)
-            return ret;
-        BIO_printf(bio_err,
-                   "Can't open %s for %s, %s\n",
-                   filename,
-                   *mode == 'r' ? "reading" : "writing", strerror(errno));
+                   "openssl (lock_dbg_cb): %s (mode=%d, type=%d) at %s:%d\n",
+                   errstr, mode, type, file, line);
     }
-    ERR_print_errors(bio_err);
-    return NULL;
 }
 
 #if defined( OPENSSL_SYS_VMS)
@@ -338,91 +265,48 @@ int main(int argc, char *argv[])
     FUNCTION f, *fp;
     LHASH_OF(FUNCTION) *prog = NULL;
     char **copied_argv = NULL;
-    char *p, *pname, *to_free = NULL;
+    char *p, *pname;
     char buf[1024];
     const char *prompt;
     ARGS arg;
     int first, n, i, ret = 0;
-    long errline;
 
     arg.argv = NULL;
     arg.size = 0;
+
+    /* Set up some of the environment. */
+    default_config_file = make_config_name();
+    bio_in = dup_bio_in(FORMAT_TEXT);
+    bio_out = dup_bio_out(FORMAT_TEXT);
+    bio_err = BIO_new_fp(stderr, BIO_NOCLOSE | BIO_FP_TEXT);
 
 #if defined( OPENSSL_SYS_VMS)
     copied_argv = argv = copy_argv(&argc, argv);
 #endif
 
     p = getenv("OPENSSL_DEBUG_MEMORY");
-    if (p == NULL)
-        /* if not set, use compiled-in default */
-        ;
-    else if (strcmp(p, "off") != 0) {
-        CRYPTO_malloc_debug_init();
-        CRYPTO_set_mem_debug_options(V_CRYPTO_MDEBUG_ALL);
-    } else {
-        CRYPTO_set_mem_debug_functions(0, 0, 0, 0, 0);
-    }
+    if (p != NULL && strcmp(p, "on") == 0)
+        CRYPTO_set_mem_debug(1);
     CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
     CRYPTO_set_locking_callback(lock_dbg_cb);
 
     if (getenv("OPENSSL_FIPS")) {
 #ifdef OPENSSL_FIPS
         if (!FIPS_mode_set(1)) {
-            ERR_load_crypto_strings();
-            ERR_print_errors(BIO_new_fp(stderr, BIO_NOCLOSE));
-            EXIT(1);
+            ERR_print_errors(bio_err);
+            return 1;
         }
 #else
-        fprintf(stderr, "FIPS mode not supported.\n");
-        EXIT(1);
+        BIO_printf(bio_err, "FIPS mode not supported.\n");
+        return 1;
 #endif
     }
 
-    apps_startup();
+    if (!apps_startup())
+        goto end;
 
-    /*
-     * If first argument is a colon, skip it.  Because in "interactive"
-     * mode our prompt is a colon and we can cut/paste whole lines
-     * by doing this hack.
-     */
-    if (argv[1] && strcmp(argv[1], ":") == 0) {
-        argv[1] = argv[0];
-        argc--;
-        argv++;
-    }
     prog = prog_init();
     pname = opt_progname(argv[0]);
-
-    /* Lets load up our environment a little */
-    bio_in = dup_bio_in();
-    bio_out = dup_bio_out();
-    bio_err = BIO_new_fp(stderr, BIO_NOCLOSE | BIO_FP_TEXT);
-
-    /* Determine and load the config file. */
-    default_config_file = getenv("OPENSSL_CONF");
-    if (default_config_file == NULL)
-        default_config_file = getenv("SSLEAY_CONF");
-    if (default_config_file == NULL)
-        default_config_file = to_free = make_config_name();
-    if (!load_config(NULL))
-        goto end;
-    config = NCONF_new(NULL);
-    i = NCONF_load(config, default_config_file, &errline);
-    if (i == 0) {
-        if (ERR_GET_REASON(ERR_peek_last_error())
-            == CONF_R_NO_SUCH_FILE) {
-            BIO_printf(bio_err,
-                       "%s: WARNING: can't open config file: %s\n",
-                       pname, default_config_file);
-            ERR_clear_error();
-            NCONF_free(config);
-            config = NULL;
-        } else {
-            ERR_print_errors(bio_err);
-            NCONF_free(config);
-            exit(1);
-        }
-    }
 
     /* first check the program name */
     f.name = pname;
@@ -448,7 +332,7 @@ int main(int argc, char *argv[])
         ret = 0;
         /* Read a line, continue reading if line ends with \ */
         for (p = buf, n = sizeof buf, i = 0, first = 1; n > 0; first = 0) {
-            prompt = first ? "openssl : " : "> ";
+            prompt = first ? "OpenSSL> " : "> ";
             p[0] = '\0';
 #ifndef READLINE
             fputs(prompt, stdout);
@@ -510,7 +394,7 @@ int main(int argc, char *argv[])
     ret = 1;
  end:
     OPENSSL_free(copied_argv);
-    OPENSSL_free(to_free);
+    OPENSSL_free(default_config_file);
     NCONF_free(config);
     config = NULL;
     lh_FUNCTION_free(prog);
@@ -519,9 +403,12 @@ int main(int argc, char *argv[])
     BIO_free(bio_in);
     BIO_free_all(bio_out);
     apps_shutdown();
-    CRYPTO_mem_leaks(bio_err);
+#ifndef OPENSSL_NO_CRYPTO_MDEBUG
+    if (CRYPTO_mem_leaks(bio_err) <= 0)
+        ret = 1;
+#endif
     BIO_free(bio_err);
-    return (ret);
+    EXIT(ret);
 }
 
 OPTIONS exit_options[] = {
@@ -561,7 +448,7 @@ typedef enum HELPLIST_CHOICE {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_COMMANDS, OPT_DIGEST_COMMANDS,
     OPT_DIGEST_ALGORITHMS, OPT_CIPHER_COMMANDS, OPT_CIPHER_ALGORITHMS,
-    OPT_PK_ALGORITHMS
+    OPT_PK_ALGORITHMS, OPT_DISABLED
 } HELPLIST_CHOICE;
 
 OPTIONS list_options[] = {
@@ -576,6 +463,8 @@ OPTIONS list_options[] = {
      "List of cipher algorithms"},
     {"public-key-algorithms", OPT_PK_ALGORITHMS, '-',
      "List of public key algorithms"},
+    {"disabled", OPT_DISABLED, '-',
+     "List of disabled features"},
     {NULL}
 };
 
@@ -583,11 +472,12 @@ int list_main(int argc, char **argv)
 {
     char *prog;
     HELPLIST_CHOICE o;
+    int done = 0;
 
     prog = opt_init(argc, argv, list_options);
     while ((o = opt_next()) != OPT_EOF) {
         switch (o) {
-        case OPT_EOF:
+        case OPT_EOF:  /* Never hit, but suppresses warning */
         case OPT_ERR:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             return 1;
@@ -612,7 +502,16 @@ int list_main(int argc, char **argv)
         case OPT_PK_ALGORITHMS:
             list_pkey();
             break;
+        case OPT_DISABLED:
+            list_disabled();
+            break;
         }
+        done = 1;
+    }
+
+    if (!done) {
+        BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
+        return 1;
     }
 
     return 0;
@@ -777,14 +676,10 @@ static int function_cmp(const FUNCTION * a, const FUNCTION * b)
     return strncmp(a->name, b->name, 8);
 }
 
-static IMPLEMENT_LHASH_COMP_FN(function, FUNCTION)
-
 static unsigned long function_hash(const FUNCTION * a)
 {
     return lh_strhash(a->name);
 }
-
-static IMPLEMENT_LHASH_HASH_FN(function, FUNCTION)
 
 static int SortFnByName(const void *_f1, const void *_f2)
 {
@@ -794,6 +689,158 @@ static int SortFnByName(const void *_f1, const void *_f2)
     if (f1->type != f2->type)
         return f1->type - f2->type;
     return strcmp(f1->name, f2->name);
+}
+
+static void list_disabled(void)
+{
+    BIO_puts(bio_out, "Disabled algorithms:\n");
+#ifdef OPENSSL_NO_AES
+    BIO_puts(bio_out, "AES\n");
+#endif
+#ifdef OPENSSL_NO_BF
+    BIO_puts(bio_out, "BF\n");
+#endif
+#ifdef OPENSSL_NO_CAMELLIA
+    BIO_puts(bio_out, "CAMELLIA\n");
+#endif
+#ifdef OPENSSL_NO_CAST
+    BIO_puts(bio_out, "CAST\n");
+#endif
+#ifdef OPENSSL_NO_CMAC
+    BIO_puts(bio_out, "CMAC\n");
+#endif
+#ifdef OPENSSL_NO_CMS
+    BIO_puts(bio_out, "CMS\n");
+#endif
+#ifdef OPENSSL_NO_COMP
+    BIO_puts(bio_out, "COMP\n");
+#endif
+#ifdef OPENSSL_NO_DES
+    BIO_puts(bio_out, "DES\n");
+#endif
+#ifdef OPENSSL_NO_DGRAM
+    BIO_puts(bio_out, "DGRAM\n");
+#endif
+#ifdef OPENSSL_NO_DH
+    BIO_puts(bio_out, "DH\n");
+#endif
+#ifdef OPENSSL_NO_DSA
+    BIO_puts(bio_out, "DSA\n");
+#endif
+#if defined(OPENSSL_NO_DTLS)
+    BIO_puts(bio_out, "DTLS\n");
+#endif
+#if defined(OPENSSL_NO_DTLS1)
+    BIO_puts(bio_out, "DTLS1\n");
+#endif
+#if defined(OPENSSL_NO_DTLS1_2)
+    BIO_puts(bio_out, "DTLS1_2\n");
+#endif
+#ifdef OPENSSL_NO_EC
+    BIO_puts(bio_out, "EC\n");
+#endif
+#ifdef OPENSSL_NO_EC2M
+    BIO_puts(bio_out, "EC2M\n");
+#endif
+#ifdef OPENSSL_NO_ENGINE
+    BIO_puts(bio_out, "ENGINE\n");
+#endif
+#ifdef OPENSSL_NO_GOST
+    BIO_puts(bio_out, "GOST\n");
+#endif
+#ifdef OPENSSL_NO_HEARTBEATS
+    BIO_puts(bio_out, "HEARTBEATS\n");
+#endif
+#ifdef OPENSSL_NO_HMAC
+    BIO_puts(bio_out, "HMAC\n");
+#endif
+#ifdef OPENSSL_NO_IDEA
+    BIO_puts(bio_out, "IDEA\n");
+#endif
+#ifdef OPENSSL_NO_MD2
+    BIO_puts(bio_out, "MD2\n");
+#endif
+#ifdef OPENSSL_NO_MD4
+    BIO_puts(bio_out, "MD4\n");
+#endif
+#ifdef OPENSSL_NO_MD5
+    BIO_puts(bio_out, "MD5\n");
+#endif
+#ifdef OPENSSL_NO_MDC2
+    BIO_puts(bio_out, "MDC2\n");
+#endif
+#ifdef OPENSSL_NO_OCB
+    BIO_puts(bio_out, "OCB\n");
+#endif
+#ifdef OPENSSL_NO_OCSP
+    BIO_puts(bio_out, "OCSP\n");
+#endif
+#ifdef OPENSSL_NO_PSK
+    BIO_puts(bio_out, "PSK\n");
+#endif
+#ifdef OPENSSL_NO_RC2
+    BIO_puts(bio_out, "RC2\n");
+#endif
+#ifdef OPENSSL_NO_RC4
+    BIO_puts(bio_out, "RC4\n");
+#endif
+#ifdef OPENSSL_NO_RC5
+    BIO_puts(bio_out, "RC5\n");
+#endif
+#ifdef OPENSSL_NO_RMD160
+    BIO_puts(bio_out, "RMD160\n");
+#endif
+#ifdef OPENSSL_NO_RSA
+    BIO_puts(bio_out, "RSA\n");
+#endif
+#ifdef OPENSSL_NO_SCRYPT
+    BIO_puts(bio_out, "SCRYPT\n");
+#endif
+#ifdef OPENSSL_NO_SCT
+    BIO_puts(bio_out, "SCT\n");
+#endif
+#ifdef OPENSSL_NO_SCTP
+    BIO_puts(bio_out, "SCTP\n");
+#endif
+#ifdef OPENSSL_NO_SEED
+    BIO_puts(bio_out, "SEED\n");
+#endif
+#ifdef OPENSSL_NO_SHA
+    BIO_puts(bio_out, "SHA\n");
+#endif
+#ifdef OPENSSL_NO_SOCK
+    BIO_puts(bio_out, "SOCK\n");
+#endif
+#ifdef OPENSSL_NO_SRP
+    BIO_puts(bio_out, "SRP\n");
+#endif
+#ifdef OPENSSL_NO_SRTP
+    BIO_puts(bio_out, "SRTP\n");
+#endif
+#ifdef OPENSSL_NO_SSL
+    BIO_puts(bio_out, "SSL\n");
+#endif
+#ifdef OPENSSL_NO_SSL3
+    BIO_puts(bio_out, "SSL3\n");
+#endif
+#if defined(OPENSSL_NO_TLS)
+    BIO_puts(bio_out, "TLS\n");
+#endif
+#ifdef OPENSSL_NO_TLS1
+    BIO_puts(bio_out, "TLS1\n");
+#endif
+#ifdef OPENSSL_NO_TLS1_1
+    BIO_puts(bio_out, "TLS1_1\n");
+#endif
+#ifdef OPENSSL_NO_TLS1_2
+    BIO_puts(bio_out, "TLS1_2\n");
+#endif
+#ifdef OPENSSL_NO_WHIRLPOOL
+    BIO_puts(bio_out, "WHIRLPOOL\n");
+#endif
+#ifndef ZLIB
+    BIO_puts(bio_out, "ZLIB\n");
+#endif
 }
 
 static LHASH_OF(FUNCTION) *prog_init(void)
@@ -806,7 +853,7 @@ static LHASH_OF(FUNCTION) *prog_init(void)
     for (i = 0, f = functions; f->name != NULL; ++f, ++i) ;
     qsort(functions, i, sizeof(*functions), SortFnByName);
 
-    if ((ret = lh_FUNCTION_new()) == NULL)
+    if ((ret = lh_FUNCTION_new(function_hash, function_cmp)) == NULL)
         return (NULL);
 
     for (f = functions; f->name != NULL; f++)

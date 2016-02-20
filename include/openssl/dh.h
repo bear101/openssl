@@ -1,4 +1,3 @@
-/* crypto/dh/dh.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -60,6 +59,7 @@
 # define HEADER_DH_H
 
 # include <openssl/e_os2.h>
+# include <openssl/opensslconf.h>
 
 # ifdef OPENSSL_NO_DH
 #  error DH is disabled.
@@ -67,7 +67,7 @@
 
 # include <openssl/bio.h>
 # include <openssl/ossl_typ.h>
-# ifdef OPENSSL_USE_DEPRECATED
+# if OPENSSL_API_COMPAT < 0x10100000L
 #  include <openssl/bn.h>
 # endif
 
@@ -142,7 +142,7 @@ struct dh_st {
     BIGNUM *p;
     BIGNUM *g;
     long length;                /* optional */
-    BIGNUM *pub_key;            /* g^x */
+    BIGNUM *pub_key;            /* g^x % p */
     BIGNUM *priv_key;           /* x */
     int flags;
     BN_MONT_CTX *method_mont_p;
@@ -174,6 +174,7 @@ struct dh_st {
 /* DH_check_pub_key error codes */
 # define DH_CHECK_PUBKEY_TOO_SMALL       0x01
 # define DH_CHECK_PUBKEY_TOO_LARGE       0x02
+# define DH_CHECK_PUBKEY_INVALID         0x04
 
 /*
  * primes p where (p-1)/2 is prime too are called "safe"; we define this for
@@ -200,20 +201,19 @@ DH *DH_new_method(ENGINE *engine);
 DH *DH_new(void);
 void DH_free(DH *dh);
 int DH_up_ref(DH *dh);
+int DH_bits(const DH *dh);
 int DH_size(const DH *dh);
 int DH_security_bits(const DH *dh);
-int DH_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
-                        CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
+#define DH_get_ex_new_index(l, p, newf, dupf, freef) \
+    CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_DH, l, p, newf, dupf, freef)
 int DH_set_ex_data(DH *d, int idx, void *arg);
 void *DH_get_ex_data(DH *d, int idx);
 
 /* Deprecated version */
-# ifdef OPENSSL_USE_DEPRECATED
-DECLARE_DEPRECATED(DH *DH_generate_parameters(int prime_len, int generator,
+DEPRECATEDIN_0_9_8(DH *DH_generate_parameters(int prime_len, int generator,
                                               void (*callback) (int, int,
                                                                 void *),
-                                              void *cb_arg));
-# endif                         /* defined(OPENSSL_USE_DEPRECATED) */
+                                              void *cb_arg))
 
 /* New version */
 int DH_generate_parameters_ex(DH *dh, int prime_len, int generator,
@@ -238,11 +238,13 @@ DH *DH_get_1024_160(void);
 DH *DH_get_2048_224(void);
 DH *DH_get_2048_256(void);
 
+# ifndef OPENSSL_NO_CMS
 /* RFC2631 KDF */
 int DH_KDF_X9_42(unsigned char *out, size_t outlen,
                  const unsigned char *Z, size_t Zlen,
                  ASN1_OBJECT *key_oid,
                  const unsigned char *ukm, size_t ukmlen, const EVP_MD *md);
+# endif
 
 # define EVP_PKEY_CTX_set_dh_paramgen_prime_len(ctx, len) \
         EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_DH, EVP_PKEY_OP_PARAMGEN, \
@@ -335,7 +337,9 @@ int DH_KDF_X9_42(unsigned char *out, size_t outlen,
 
 /* KDF types */
 # define EVP_PKEY_DH_KDF_NONE                            1
+# ifndef OPENSSL_NO_CMS
 # define EVP_PKEY_DH_KDF_X9_42                           2
+# endif
 
 /* BEGIN ERROR CODES */
 /*

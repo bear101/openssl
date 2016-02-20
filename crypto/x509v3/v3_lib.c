@@ -1,4 +1,3 @@
-/* v3_lib.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -59,7 +58,7 @@
 /* X509 v3 extension utilities */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 
@@ -73,7 +72,8 @@ static void ext_list_free(X509V3_EXT_METHOD *ext);
 
 int X509V3_EXT_add(X509V3_EXT_METHOD *ext)
 {
-    if (!ext_list && !(ext_list = sk_X509V3_EXT_METHOD_new(ext_cmp))) {
+    if (ext_list == NULL
+        && (ext_list = sk_X509V3_EXT_METHOD_new(ext_cmp)) == NULL) {
         X509V3err(X509V3_F_X509V3_EXT_ADD, ERR_R_MALLOC_FAILURE);
         return 0;
     }
@@ -94,6 +94,73 @@ DECLARE_OBJ_BSEARCH_CMP_FN(const X509V3_EXT_METHOD *,
                            const X509V3_EXT_METHOD *, ext);
 IMPLEMENT_OBJ_BSEARCH_CMP_FN(const X509V3_EXT_METHOD *,
                              const X509V3_EXT_METHOD *, ext);
+
+/*
+ * This table will be searched using OBJ_bsearch so it *must* kept in order
+ * of the ext_nid values.
+ */
+
+static const X509V3_EXT_METHOD *standard_exts[] = {
+    &v3_nscert,
+    &v3_ns_ia5_list[0],
+    &v3_ns_ia5_list[1],
+    &v3_ns_ia5_list[2],
+    &v3_ns_ia5_list[3],
+    &v3_ns_ia5_list[4],
+    &v3_ns_ia5_list[5],
+    &v3_ns_ia5_list[6],
+    &v3_skey_id,
+    &v3_key_usage,
+    &v3_pkey_usage_period,
+    &v3_alt[0],
+    &v3_alt[1],
+    &v3_bcons,
+    &v3_crl_num,
+    &v3_cpols,
+    &v3_akey_id,
+    &v3_crld,
+    &v3_ext_ku,
+    &v3_delta_crl,
+    &v3_crl_reason,
+#ifndef OPENSSL_NO_OCSP
+    &v3_crl_invdate,
+#endif
+    &v3_sxnet,
+    &v3_info,
+#ifndef OPENSSL_NO_RFC3779
+    &v3_addr,
+    &v3_asid,
+#endif
+#ifndef OPENSSL_NO_OCSP
+    &v3_ocsp_nonce,
+    &v3_ocsp_crlid,
+    &v3_ocsp_accresp,
+    &v3_ocsp_nocheck,
+    &v3_ocsp_acutoff,
+    &v3_ocsp_serviceloc,
+#endif
+    &v3_sinfo,
+    &v3_policy_constraints,
+#ifndef OPENSSL_NO_OCSP
+    &v3_crl_hold,
+#endif
+    &v3_pci,
+    &v3_name_constraints,
+    &v3_policy_mappings,
+    &v3_inhibit_anyp,
+    &v3_idp,
+    &v3_alt[2],
+    &v3_freshest_crl,
+#ifndef OPENSSL_NO_CT
+    &v3_ct_scts[0],
+    &v3_ct_scts[1],
+#endif
+    &v3_tls_feature,
+};
+
+/* Number of standard extensions */
+
+#define STANDARD_EXTENSION_COUNT OSSL_NELEM(standard_exts)
 
 const X509V3_EXT_METHOD *X509V3_EXT_get_nid(int nid)
 {
@@ -135,12 +202,11 @@ int X509V3_EXT_add_alias(int nid_to, int nid_from)
     const X509V3_EXT_METHOD *ext;
     X509V3_EXT_METHOD *tmpext;
 
-    if (!(ext = X509V3_EXT_get_nid(nid_from))) {
-        X509V3err(X509V3_F_X509V3_EXT_ADD_ALIAS,
-                  X509V3_R_EXTENSION_NOT_FOUND);
+    if ((ext = X509V3_EXT_get_nid(nid_from)) == NULL) {
+        X509V3err(X509V3_F_X509V3_EXT_ADD_ALIAS, X509V3_R_EXTENSION_NOT_FOUND);
         return 0;
     }
-    if (!(tmpext = OPENSSL_malloc(sizeof(*tmpext)))) {
+    if ((tmpext = OPENSSL_malloc(sizeof(*tmpext))) == NULL) {
         X509V3err(X509V3_F_X509V3_EXT_ADD_ALIAS, ERR_R_MALLOC_FAILURE);
         return 0;
     }
@@ -181,7 +247,7 @@ void *X509V3_EXT_d2i(X509_EXTENSION *ext)
     ASN1_STRING *extvalue;
     int extlen;
 
-    if (!(method = X509V3_EXT_get(ext)))
+    if ((method = X509V3_EXT_get(ext)) == NULL)
         return NULL;
     extvalue = X509_EXTENSION_get_data(ext);
     p = ASN1_STRING_data(extvalue);
@@ -326,7 +392,8 @@ int X509V3_add1_i2d(STACK_OF(X509_EXTENSION) **x, int nid, void *value,
         return 1;
     }
 
-    if (!*x && !(*x = sk_X509_EXTENSION_new_null()))
+    if (*x == NULL
+        && (*x = sk_X509_EXTENSION_new_null()) == NULL)
         return -1;
     if (!sk_X509_EXTENSION_push(*x, ext))
         return -1;

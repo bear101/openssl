@@ -64,13 +64,12 @@
 
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
-#ifndef OPENSSL_NO_SSL_TRACE
     OPT_STDNAME,
-#endif
-#ifndef OPENSSL_NO_SSL3
     OPT_SSL3,
-#endif
     OPT_TLS1,
+    OPT_TLS1_1,
+    OPT_TLS1_2,
+    OPT_PSK,
     OPT_V, OPT_UPPER_V, OPT_S
 } OPTION_CHOICE;
 
@@ -79,25 +78,49 @@ OPTIONS ciphers_options[] = {
     {"v", OPT_V, '-', "Verbose listing of the SSL/TLS ciphers"},
     {"V", OPT_UPPER_V, '-', "Even more verbose"},
     {"s", OPT_S, '-', "Only supported ciphers"},
-#ifndef OPENSSL_NO_SSL_TRACE
-    {"stdname", OPT_STDNAME, '-', "Show standard cipher names"},
-#endif
 #ifndef OPENSSL_NO_SSL3
     {"ssl3", OPT_SSL3, '-', "SSL3 mode"},
 #endif
+#ifndef OPENSSL_NO_TLS1
     {"tls1", OPT_TLS1, '-', "TLS1 mode"},
+#endif
+#ifndef OPENSSL_NO_TLS1_1
+    {"tls1_1", OPT_TLS1_1, '-', "TLS1.1 mode"},
+#endif
+#ifndef OPENSSL_NO_TLS1_2
+    {"tls1_2", OPT_TLS1_2, '-', "TLS1.2 mode"},
+#endif
+#ifndef OPENSSL_NO_SSL_TRACE
+    {"stdname", OPT_STDNAME, '-', "Show standard cipher names"},
+#endif
+#ifndef OPENSSL_NO_PSK
+    {"psk", OPT_PSK, '-', "include ciphersuites requiring PSK"},
+#endif
     {NULL}
 };
+
+#ifndef OPENSSL_NO_PSK
+static unsigned int dummy_psk(SSL *ssl, const char *hint, char *identity,
+                              unsigned int max_identity_len,
+                              unsigned char *psk,
+                              unsigned int max_psk_len)
+{
+    return 0;
+}
+#endif
 
 int ciphers_main(int argc, char **argv)
 {
     SSL_CTX *ctx = NULL;
     SSL *ssl = NULL;
     STACK_OF(SSL_CIPHER) *sk = NULL;
-    const SSL_METHOD *meth = SSLv23_server_method();
+    const SSL_METHOD *meth = TLS_server_method();
     int ret = 1, i, verbose = 0, Verbose = 0, use_supported = 0;
 #ifndef OPENSSL_NO_SSL_TRACE
     int stdname = 0;
+#endif
+#ifndef OPENSSL_NO_PSK
+    int psk = 0;
 #endif
     const char *p;
     char *ciphers = NULL, *prog;
@@ -125,18 +148,35 @@ int ciphers_main(int argc, char **argv)
         case OPT_S:
             use_supported = 1;
             break;
-#ifndef OPENSSL_NO_SSL_TRACE
         case OPT_STDNAME:
+#ifndef OPENSSL_NO_SSL_TRACE
             stdname = verbose = 1;
-            break;
 #endif
-#ifndef OPENSSL_NO_SSL3
+            break;
         case OPT_SSL3:
+#ifndef OPENSSL_NO_SSL3
             meth = SSLv3_client_method();
-            break;
 #endif
+            break;
         case OPT_TLS1:
+#ifndef OPENSSL_NO_TLS1
             meth = TLSv1_client_method();
+#endif
+            break;
+        case OPT_TLS1_1:
+#ifndef OPENSSL_NO_TLS1_1
+            meth = TLSv1_1_client_method();
+#endif
+            break;
+        case OPT_TLS1_2:
+#ifndef OPENSSL_NO_TLS1_2
+            meth = TLSv1_2_client_method();
+#endif
+            break;
+        case OPT_PSK:
+#ifndef OPENSSL_NO_PSK
+            psk = 1;
+#endif
             break;
         }
     }
@@ -151,6 +191,10 @@ int ciphers_main(int argc, char **argv)
     ctx = SSL_CTX_new(meth);
     if (ctx == NULL)
         goto err;
+#ifndef OPENSSL_NO_PSK
+    if (psk)
+        SSL_CTX_set_psk_client_callback(ctx, dummy_psk);
+#endif
     if (ciphers != NULL) {
         if (!SSL_CTX_set_cipher_list(ctx, ciphers)) {
             BIO_printf(bio_err, "Error in cipher list\n");
@@ -168,7 +212,7 @@ int ciphers_main(int argc, char **argv)
 
     if (!verbose) {
         for (i = 0; i < sk_SSL_CIPHER_num(sk); i++) {
-            SSL_CIPHER *c = sk_SSL_CIPHER_value(sk, i);
+            const SSL_CIPHER *c = sk_SSL_CIPHER_value(sk, i);
             p = SSL_CIPHER_get_name(c);
             if (p == NULL)
                 break;
@@ -180,7 +224,7 @@ int ciphers_main(int argc, char **argv)
     } else {
 
         for (i = 0; i < sk_SSL_CIPHER_num(sk); i++) {
-            SSL_CIPHER *c;
+            const SSL_CIPHER *c;
 
             c = sk_SSL_CIPHER_value(sk, i);
 

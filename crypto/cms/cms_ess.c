@@ -1,4 +1,3 @@
-/* crypto/cms/cms_ess.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL
  * project.
@@ -52,7 +51,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
@@ -60,9 +59,6 @@
 #include <openssl/err.h>
 #include <openssl/cms.h>
 #include "cms_lcl.h"
-
-DECLARE_ASN1_ITEM(CMS_ReceiptRequest)
-DECLARE_ASN1_ITEM(CMS_Receipt)
 
 IMPLEMENT_ASN1_FUNCTIONS(CMS_ReceiptRequest)
 
@@ -100,7 +96,7 @@ CMS_ReceiptRequest *CMS_ReceiptRequest_create0(unsigned char *id, int idlen,
     CMS_ReceiptRequest *rr = NULL;
 
     rr = CMS_ReceiptRequest_new();
-    if (!rr)
+    if (rr == NULL)
         goto merr;
     if (id)
         ASN1_STRING_set0(rr->signedContentIdentifier, id, idlen);

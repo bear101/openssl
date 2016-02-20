@@ -1,4 +1,3 @@
-/* crypto/rsa/rsa.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -59,12 +58,13 @@
 #ifndef HEADER_RSA_H
 # define HEADER_RSA_H
 
+# include <openssl/opensslconf.h>
 # include <openssl/asn1.h>
 
 # include <openssl/bio.h>
 # include <openssl/crypto.h>
 # include <openssl/ossl_typ.h>
-# ifdef OPENSSL_USE_DEPRECATED
+# if OPENSSL_API_COMPAT < 0x10100000L
 #  include <openssl/bn.h>
 # endif
 
@@ -107,9 +107,7 @@ struct rsa_meth_st {
      * New sign and verify functions: some libraries don't allow arbitrary
      * data to be signed/verified: this allows them to be used. Note: for
      * this to work the RSA_public_decrypt() and RSA_private_encrypt() should
-     * *NOT* be used RSA_sign(), RSA_verify() should be used instead. Note:
-     * for backwards compatibility this functionality is only enabled if the
-     * RSA_FLAG_SIGN_VER option is set in 'flags'.
+     * *NOT* be used RSA_sign(), RSA_verify() should be used instead.
      */
     int (*rsa_sign) (int type,
                      const unsigned char *m, unsigned int m_length,
@@ -196,12 +194,6 @@ struct rsa_st {
 # define RSA_FLAG_EXT_PKEY               0x0020
 
 /*
- * This flag in the RSA_METHOD enables the new rsa_sign, rsa_verify
- * functions.
- */
-# define RSA_FLAG_SIGN_VER               0x0040
-
-/*
  * new with 0.9.6j and 0.9.7b; the built-in
  * RSA implementation now uses blinding by
  * default (ignoring RSA_FLAG_BLINDING),
@@ -220,7 +212,7 @@ struct rsa_st {
  * private key operations.
  */
 # define RSA_FLAG_NO_CONSTTIME           0x0100
-# ifdef OPENSSL_USE_DEPRECATED
+# if OPENSSL_API_COMPAT < 0x00908000L
 /* deprecated name for the flag*/
 /*
  * new with 0.9.7h; the built-in RSA
@@ -319,15 +311,14 @@ struct rsa_st {
 
 RSA *RSA_new(void);
 RSA *RSA_new_method(ENGINE *engine);
+int RSA_bits(const RSA *rsa);
 int RSA_size(const RSA *rsa);
 int RSA_security_bits(const RSA *rsa);
 
 /* Deprecated version */
-# ifdef OPENSSL_USE_DEPRECATED
-DECLARE_DEPRECATED(RSA *RSA_generate_key(int bits, unsigned long e, void
-                                          (*callback) (int, int, void *),
-                                         void *cb_arg));
-# endif                         /* defined(OPENSSL_USE_DEPRECATED) */
+DEPRECATEDIN_0_9_8(RSA *RSA_generate_key(int bits, unsigned long e, void
+                                         (*callback) (int, int, void *),
+                                         void *cb_arg))
 
 /* New version */
 int RSA_generate_key_ex(RSA *rsa, int bits, BIGNUM *e, BN_GENCB *cb);
@@ -364,8 +355,8 @@ int RSA_set_method(RSA *rsa, const RSA_METHOD *meth);
 /* This function needs the memory locking malloc callbacks to be installed */
 int RSA_memory_lock(RSA *r);
 
-/* these are the actual SSLeay RSA functions */
-const RSA_METHOD *RSA_PKCS1_SSLeay(void);
+/* these are the actual RSA functions */
+const RSA_METHOD *RSA_PKCS1_OpenSSL(void);
 
 const RSA_METHOD *RSA_null_method(void);
 
@@ -394,22 +385,6 @@ int RSA_print_fp(FILE *fp, const RSA *r, int offset);
 # endif
 
 int RSA_print(BIO *bp, const RSA *r, int offset);
-
-# ifndef OPENSSL_NO_RC4
-int i2d_RSA_NET(const RSA *a, unsigned char **pp,
-                int (*cb) (char *buf, int len, const char *prompt,
-                           int verify), int sgckey);
-RSA *d2i_RSA_NET(RSA **a, const unsigned char **pp, long length,
-                 int (*cb) (char *buf, int len, const char *prompt,
-                            int verify), int sgckey);
-
-int i2d_Netscape_RSA(const RSA *a, unsigned char **pp,
-                     int (*cb) (char *buf, int len, const char *prompt,
-                                int verify));
-RSA *d2i_Netscape_RSA(RSA **a, const unsigned char **pp, long length,
-                      int (*cb) (char *buf, int len, const char *prompt,
-                                 int verify));
-# endif
 
 /*
  * The following 2 functions sign and verify a X509_SIG ASN1 object inside
@@ -493,8 +468,8 @@ int RSA_padding_add_PKCS1_PSS_mgf1(RSA *rsa, unsigned char *EM,
                                    const EVP_MD *Hash, const EVP_MD *mgf1Hash,
                                    int sLen);
 
-int RSA_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
-                         CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
+#define RSA_get_ex_new_index(l, p, newf, dupf, freef) \
+    CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_RSA, l, p, newf, dupf, freef)
 int RSA_set_ex_data(RSA *r, int idx, void *arg);
 void *RSA_get_ex_data(const RSA *r, int idx);
 
@@ -550,10 +525,10 @@ void ERR_load_RSA_strings(void);
 # define RSA_F_RSA_CHECK_KEY                              123
 # define RSA_F_RSA_CHECK_KEY_EX                           160
 # define RSA_F_RSA_CMS_DECRYPT                            159
-# define RSA_F_RSA_EAY_PRIVATE_DECRYPT                    101
-# define RSA_F_RSA_EAY_PRIVATE_ENCRYPT                    102
-# define RSA_F_RSA_EAY_PUBLIC_DECRYPT                     103
-# define RSA_F_RSA_EAY_PUBLIC_ENCRYPT                     104
+# define RSA_F_RSA_OSSL_PRIVATE_DECRYPT                   101
+# define RSA_F_RSA_OSSL_PRIVATE_ENCRYPT                   102
+# define RSA_F_RSA_OSSL_PUBLIC_DECRYPT                    103
+# define RSA_F_RSA_OSSL_PUBLIC_ENCRYPT                    104
 # define RSA_F_RSA_GENERATE_KEY                           105
 # define RSA_F_RSA_ITEM_VERIFY                            148
 # define RSA_F_RSA_MEMORY_LOCK                            130

@@ -135,9 +135,10 @@ int crl2pkcs7_main(int argc, char **argv)
             nocrl = 1;
             break;
         case OPT_CERTFILE:
-            if (!certflst && !(certflst = sk_OPENSSL_STRING_new_null()))
+            if ((certflst == NULL)
+                && (certflst = sk_OPENSSL_STRING_new_null()) == NULL)
                 goto end;
-            if (!sk_OPENSSL_STRING_push(certflst, *(++argv))) {
+            if (!sk_OPENSSL_STRING_push(certflst, opt_arg())) {
                 sk_OPENSSL_STRING_free(certflst);
                 goto end;
             }
@@ -145,10 +146,11 @@ int crl2pkcs7_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
     if (!nocrl) {
-        in = bio_open_default(infile, RB(informat));
+        in = bio_open_default(infile, 'r', informat);
         if (in == NULL)
             goto end;
 
@@ -197,7 +199,7 @@ int crl2pkcs7_main(int argc, char **argv)
 
     sk_OPENSSL_STRING_free(certflst);
 
-    out = bio_open_default(outfile, WB(outformat));
+    out = bio_open_default(outfile, 'w', outformat);
     if (out == NULL)
         goto end;
 

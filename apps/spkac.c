@@ -95,7 +95,7 @@ OPTIONS spkac_options[] = {
 
 int spkac_main(int argc, char **argv)
 {
-    BIO *in = NULL, *out = NULL;
+    BIO *out = NULL;
     CONF *conf = NULL;
     ENGINE *e = NULL;
     EVP_PKEY *pkey = NULL;
@@ -112,6 +112,7 @@ int spkac_main(int argc, char **argv)
         switch (o) {
         case OPT_EOF:
         case OPT_ERR:
+ opthelp:
             BIO_printf(bio_err, "%s: Use -help for summary.\n", prog);
             goto end;
         case OPT_HELP:
@@ -154,7 +155,8 @@ int spkac_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
     if (!app_passwd(passinarg, NULL, &passin, NULL)) {
         BIO_printf(bio_err, "Error getting password\n");
@@ -175,7 +177,7 @@ int spkac_main(int argc, char **argv)
         NETSCAPE_SPKI_sign(spki, pkey, EVP_md5());
         spkstr = NETSCAPE_SPKI_b64_encode(spki);
 
-        out = bio_open_default(outfile, "w");
+        out = bio_open_default(outfile, 'w', FORMAT_TEXT);
         if (out == NULL)
             goto end;
         BIO_printf(out, "SPKAC=%s\n", spkstr);
@@ -184,21 +186,12 @@ int spkac_main(int argc, char **argv)
         goto end;
     }
 
-    in = bio_open_default(infile, "r");
-    if (in == NULL)
+    if ((conf = app_load_config(infile)) == NULL)
         goto end;
-
-    conf = NCONF_new(NULL);
-    i = NCONF_load_bio(conf, in, NULL);
-    if (!i) {
-        BIO_printf(bio_err, "Error parsing config file\n");
-        ERR_print_errors(bio_err);
-        goto end;
-    }
 
     spkstr = NCONF_get_string(conf, spksect, spkac);
 
-    if (!spkstr) {
+    if (spkstr == NULL) {
         BIO_printf(bio_err, "Can't find SPKAC called \"%s\"\n", spkac);
         ERR_print_errors(bio_err);
         goto end;
@@ -212,7 +205,7 @@ int spkac_main(int argc, char **argv)
         goto end;
     }
 
-    out = bio_open_default(outfile, "w");
+    out = bio_open_default(outfile, 'w', FORMAT_TEXT);
     if (out == NULL)
         goto end;
 
@@ -237,7 +230,6 @@ int spkac_main(int argc, char **argv)
  end:
     NCONF_free(conf);
     NETSCAPE_SPKI_free(spki);
-    BIO_free(in);
     BIO_free_all(out);
     EVP_PKEY_free(pkey);
     OPENSSL_free(passin);

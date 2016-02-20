@@ -1,4 +1,3 @@
-/* crypto/ts/ts_lib.c */
 /*
  * Written by Zoltan Glozik (zglozik@stones.com) for the OpenSSL project
  * 2002.
@@ -58,16 +57,13 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/bn.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/ts.h>
-
-/* Local function declarations. */
-
-/* Function definitions. */
+#include "ts_lcl.h"
 
 int TS_ASN1_INTEGER_print_bio(BIO *bio, const ASN1_INTEGER *num)
 {
@@ -76,7 +72,7 @@ int TS_ASN1_INTEGER_print_bio(BIO *bio, const ASN1_INTEGER *num)
     char *hex;
 
     num_bn = BN_new();
-    if (!num_bn)
+    if (num_bn == NULL)
         return -1;
     ASN1_INTEGER_to_BN(num, num_bn);
     if ((hex = BN_bn2hex(num_bn))) {
@@ -135,10 +131,10 @@ int TS_MSG_IMPRINT_print_bio(BIO *bio, TS_MSG_IMPRINT *a)
 {
     ASN1_OCTET_STRING *msg;
 
-    TS_X509_ALGOR_print_bio(bio, TS_MSG_IMPRINT_get_algo(a));
+    TS_X509_ALGOR_print_bio(bio, a->hash_algo);
 
     BIO_printf(bio, "Message data:\n");
-    msg = TS_MSG_IMPRINT_get_msg(a);
+    msg = a->hashed_msg;
     BIO_dump_indent(bio, (const char *)ASN1_STRING_data(msg),
                     ASN1_STRING_length(msg), 4);
 

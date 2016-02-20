@@ -1,4 +1,3 @@
-/* p5_pbe.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/rand.h>
@@ -82,7 +81,7 @@ int PKCS5_pbe_set0_algor(X509_ALGOR *algor, int alg, int iter,
     unsigned char *sstr;
 
     pbe = PBEPARAM_new();
-    if (!pbe) {
+    if (pbe == NULL) {
         ASN1err(ASN1_F_PKCS5_PBE_SET0_ALGOR, ERR_R_MALLOC_FAILURE);
         goto err;
     }
@@ -128,7 +127,7 @@ X509_ALGOR *PKCS5_pbe_set(int alg, int iter,
 {
     X509_ALGOR *ret;
     ret = X509_ALGOR_new();
-    if (!ret) {
+    if (ret == NULL) {
         ASN1err(ASN1_F_PKCS5_PBE_SET, ERR_R_MALLOC_FAILURE);
         return NULL;
     }

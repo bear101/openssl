@@ -1,4 +1,3 @@
-/* ssl/record/rec_layer_d1.c */
 /*
  * DTLS implementation written by Nagendra Modadugu
  * (nagendra@cs.stanford.edu) for the OpenSSL project 2005.
@@ -119,7 +118,6 @@
 #include "../ssl_locl.h"
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
-#include <openssl/pqueue.h>
 #include <openssl/rand.h>
 #include "record_locl.h"
 
@@ -137,8 +135,8 @@ int DTLS_RECORD_LAYER_new(RECORD_LAYER *rl)
     d->processed_rcds.q = pqueue_new();
     d->buffered_app_data.q = pqueue_new();
 
-    if (!d->unprocessed_rcds.q || !d->processed_rcds.q
-        || !d->buffered_app_data.q) {
+    if (d->unprocessed_rcds.q == NULL || d->processed_rcds.q == NULL
+        || d->buffered_app_data.q == NULL) {
         pqueue_free(d->unprocessed_rcds.q);
         pqueue_free(d->processed_rcds.q);
         pqueue_free(d->buffered_app_data.q);
@@ -165,9 +163,9 @@ void DTLS_RECORD_LAYER_clear(RECORD_LAYER *rl)
     DTLS_RECORD_LAYER *d;
     pitem *item = NULL;
     DTLS1_RECORD_DATA *rdata;
-    pqueue unprocessed_rcds;
-    pqueue processed_rcds;
-    pqueue buffered_app_data;
+    pqueue *unprocessed_rcds;
+    pqueue *processed_rcds;
+    pqueue *buffered_app_data;
 
     d = rl->d;
     
@@ -226,6 +224,12 @@ void DTLS_RECORD_LAYER_resync_write(RECORD_LAYER *rl)
     memcpy(rl->write_sequence, rl->read_sequence, sizeof(rl->write_sequence));
 }
 
+
+void DTLS_RECORD_LAYER_set_write_sequence(RECORD_LAYER *rl, unsigned char *seq)
+{
+    memcpy(rl->write_sequence, seq, SEQ_NUM_SIZE);
+}
+
 static int have_handshake_fragment(SSL *s, int type, unsigned char *buf,
                                    int len, int peek);
 
@@ -277,8 +281,8 @@ int dtls1_buffer_record(SSL *s, record_pqueue *queue, unsigned char *priority)
 #ifndef OPENSSL_NO_SCTP
     /* Store bio_dgram_sctp_rcvinfo struct */
     if (BIO_dgram_is_sctp(SSL_get_rbio(s)) &&
-        (s->state == SSL3_ST_SR_FINISHED_A
-         || s->state == SSL3_ST_CR_FINISHED_A)) {
+        (SSL_get_state(s) == TLS_ST_SR_FINISHED
+         || SSL_get_state(s) == TLS_ST_CR_FINISHED)) {
         BIO_ctrl(SSL_get_rbio(s), BIO_CTRL_DGRAM_SCTP_GET_RCVINFO,
                  sizeof(rdata->recordinfo), &rdata->recordinfo);
     }
@@ -379,8 +383,9 @@ int dtls1_process_buffered_records(SSL *s)
  * (possibly multiple records if we still don't have anything to return).
  *
  * This function must handle any surprises the peer may have for us, such as
- * Alert records (e.g. close_notify), ChangeCipherSpec records (not really
- * a surprise, but handled as if it were), or renegotiation requests.
+ * Alert records (e.g. close_notify) or renegotiation requests. ChangeCipherSpec
+ * messages are treated as if they were handshake messages *if* the |recd_type|
+ * argument is non NULL.
  * Also if record payloads contain fragments too small to process, we store
  * them until there is enough for the respective protocol (the record protocol
  * may use arbitrary fragmentation and even interleaving):
@@ -395,7 +400,8 @@ int dtls1_process_buffered_records(SSL *s)
  *     Application data protocol
  *             none of our business
  */
-int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
+int dtls1_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
+                     int len, int peek)
 {
     int al, i, j, ret;
     unsigned int n;
@@ -431,13 +437,12 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
      * Continue handshake if it had to be interrupted to read app data with
      * SCTP.
      */
-    if ((!s->in_handshake && SSL_in_init(s)) ||
-        (BIO_dgram_is_sctp(SSL_get_rbio(s)) &&
-         (s->state == DTLS1_SCTP_ST_SR_READ_SOCK
-          || s->state == DTLS1_SCTP_ST_CR_READ_SOCK)
+    if ((!ossl_statem_get_in_handshake(s) && SSL_in_init(s)) ||
+        (BIO_dgram_is_sctp(SSL_get_rbio(s))
+         && ossl_statem_in_sctp_read_sock(s)
          && s->s3->in_read_app_data != 2))
 #else
-    if (!s->in_handshake && SSL_in_init(s))
+    if (!ossl_statem_get_in_handshake(s) && SSL_in_init(s))
 #endif
     {
         /* type == SSL3_RT_APPLICATION_DATA */
@@ -465,7 +470,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
      * We are not handshaking and have no data yet, so process data buffered
      * during the last handshake in advance, if any.
      */
-    if (s->state == SSL_ST_OK && SSL3_RECORD_get_length(rr) == 0) {
+    if (SSL_is_init_finished(s) && SSL3_RECORD_get_length(rr) == 0) {
         pitem *item;
         item = pqueue_pop(s->rlayer.d->buffered_app_data.q);
         if (item) {
@@ -503,11 +508,6 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
         }
     }
 
-    if (s->d1->listen && rr->type != SSL3_RT_HANDSHAKE) {
-        SSL3_RECORD_set_length(rr, 0);
-        goto start;
-    }
-
     /* we now have a packet which can be read and processed */
 
     if (s->s3->change_cipher_spec /* set when we receive ChangeCipherSpec,
@@ -537,9 +537,14 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
         return (0);
     }
 
-    if (type == SSL3_RECORD_get_type(rr)) {
-        /* SSL3_RT_APPLICATION_DATA or
-         * SSL3_RT_HANDSHAKE */
+    if (type == SSL3_RECORD_get_type(rr)
+            || (SSL3_RECORD_get_type(rr) == SSL3_RT_CHANGE_CIPHER_SPEC
+                && type == SSL3_RT_HANDSHAKE && recvd_type != NULL)) {
+        /*
+         * SSL3_RT_APPLICATION_DATA or
+         * SSL3_RT_HANDSHAKE or
+         * SSL3_RT_CHANGE_CIPHER_SPEC
+         */
         /*
          * make sure that we are not getting application data when we are
          * doing a handshake for the first time
@@ -550,6 +555,9 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
             SSLerr(SSL_F_DTLS1_READ_BYTES, SSL_R_APP_DATA_IN_HANDSHAKE);
             goto f_err;
         }
+
+        if (recvd_type != NULL)
+            *recvd_type = SSL3_RECORD_get_type(rr);
 
         if (len <= 0)
             return (len);
@@ -575,8 +583,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
          */
         if (BIO_dgram_is_sctp(SSL_get_rbio(s)) &&
             SSL3_RECORD_get_type(rr) == SSL3_RT_APPLICATION_DATA &&
-            (s->state == DTLS1_SCTP_ST_SR_READ_SOCK
-             || s->state == DTLS1_SCTP_ST_CR_READ_SOCK)) {
+            ossl_statem_in_sctp_read_sock(s)) {
             s->rwstate = SSL_READING;
             BIO_clear_retry_flags(SSL_get_rbio(s));
             BIO_set_retry_read(SSL_get_rbio(s));
@@ -621,7 +628,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
             dest_len = &s->rlayer.d->alert_fragment_len;
         }
 #ifndef OPENSSL_NO_HEARTBEATS
-        else if (SSL3_RECORD_get_type(rr) == TLS1_RT_HEARTBEAT) {
+        else if (SSL3_RECORD_get_type(rr) == DTLS1_RT_HEARTBEAT) {
             /* We allow a 0 return */
             if (dtls1_process_heartbeat(s, SSL3_RECORD_get_data(rr),
                     SSL3_RECORD_get_length(rr)) < 0) {
@@ -704,7 +711,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
             (s->rlayer.d->handshake_fragment[3] != 0)) {
             al = SSL_AD_DECODE_ERROR;
             SSLerr(SSL_F_DTLS1_READ_BYTES, SSL_R_BAD_HELLO_REQUEST);
-            goto err;
+            goto f_err;
         }
 
         /*
@@ -857,62 +864,11 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
     }
 
     if (SSL3_RECORD_get_type(rr) == SSL3_RT_CHANGE_CIPHER_SPEC) {
-        struct ccs_header_st ccs_hdr;
-        unsigned int ccs_hdr_len = DTLS1_CCS_HEADER_LENGTH;
-
-        dtls1_get_ccs_header(SSL3_RECORD_get_data(rr), &ccs_hdr);
-
-        if (s->version == DTLS1_BAD_VER)
-            ccs_hdr_len = 3;
-
-        /*
-         * 'Change Cipher Spec' is just a single byte, so we know exactly
-         * what the record payload has to look like
-         */
-        /* XDTLS: check that epoch is consistent */
-        if ((SSL3_RECORD_get_length(rr) != ccs_hdr_len)
-                || (SSL3_RECORD_get_off(rr) != 0)
-                || (SSL3_RECORD_get_data(rr)[0] != SSL3_MT_CCS)) {
-            i = SSL_AD_ILLEGAL_PARAMETER;
-            SSLerr(SSL_F_DTLS1_READ_BYTES, SSL_R_BAD_CHANGE_CIPHER_SPEC);
-            goto err;
-        }
-
-        SSL3_RECORD_set_length(rr, 0);
-
-        if (s->msg_callback)
-            s->msg_callback(0, s->version, SSL3_RT_CHANGE_CIPHER_SPEC,
-                SSL3_RECORD_get_data(rr), 1, s, s->msg_callback_arg);
-
         /*
          * We can't process a CCS now, because previous handshake messages
          * are still missing, so just drop it.
          */
-        if (!s->d1->change_cipher_spec_ok) {
-            goto start;
-        }
-
-        s->d1->change_cipher_spec_ok = 0;
-
-        s->s3->change_cipher_spec = 1;
-        if (!ssl3_do_change_cipher_spec(s))
-            goto err;
-
-        /* do this whenever CCS is processed */
-        dtls1_reset_seq_numbers(s, SSL3_CC_READ);
-
-        if (s->version == DTLS1_BAD_VER)
-            s->d1->handshake_read_seq++;
-
-#ifndef OPENSSL_NO_SCTP
-        /*
-         * Remember that a CCS has been received, so that an old key of
-         * SCTP-Auth can be deleted when a CCS is sent. Will be ignored if no
-         * SCTP is used
-         */
-        BIO_ctrl(SSL_get_wbio(s), BIO_CTRL_DGRAM_SCTP_AUTH_CCS_RCVD, 1, NULL);
-#endif
-
+        SSL3_RECORD_set_length(rr, 0);
         goto start;
     }
 
@@ -920,7 +876,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
      * Unexpected handshake message (Client Hello, or protocol violation)
      */
     if ((s->rlayer.d->handshake_fragment_len >= DTLS1_HM_HEADER_LENGTH) &&
-        !s->in_handshake) {
+        !ossl_statem_get_in_handshake(s)) {
         struct hm_header_st msg_hdr;
 
         /* this may just be a stale retransmit */
@@ -943,9 +899,9 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
             goto start;
         }
 
-        if (((s->state & SSL_ST_MASK) == SSL_ST_OK) &&
+        if (SSL_is_init_finished(s) &&
             !(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS)) {
-            s->state = s->server ? SSL_ST_ACCEPT : SSL_ST_CONNECT;
+            ossl_statem_set_in_init(s, 1);
             s->renegotiate = 1;
             s->new_session = 1;
         }
@@ -992,8 +948,8 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
     case SSL3_RT_HANDSHAKE:
         /*
          * we already handled all of these, with the possible exception of
-         * SSL3_RT_HANDSHAKE when s->in_handshake is set, but that should not
-         * happen when type != rr->type
+         * SSL3_RT_HANDSHAKE when ossl_statem_get_in_handshake(s) is true, but
+         * that should not happen when type != rr->type
          */
         al = SSL_AD_UNEXPECTED_MESSAGE;
         SSLerr(SSL_F_DTLS1_READ_BYTES, ERR_R_INTERNAL_ERROR);
@@ -1008,14 +964,7 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
          */
         if (s->s3->in_read_app_data &&
             (s->s3->total_renegotiations != 0) &&
-            (((s->state & SSL_ST_CONNECT) &&
-              (s->state >= SSL3_ST_CW_CLNT_HELLO_A) &&
-              (s->state <= SSL3_ST_CR_SRVR_HELLO_A)
-             ) || ((s->state & SSL_ST_ACCEPT) &&
-                   (s->state <= SSL3_ST_SW_HELLO_REQ_A) &&
-                   (s->state >= SSL3_ST_SR_CLNT_HELLO_A)
-             )
-            )) {
+            ossl_statem_app_data_allowed(s)) {
             s->s3->in_read_app_data = 2;
             return (-1);
         } else {
@@ -1028,7 +977,6 @@ int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek)
 
  f_err:
     ssl3_send_alert(s, SSL3_AL_FATAL, al);
- err:
     return (-1);
 }
 
@@ -1162,6 +1110,8 @@ int do_dtls1_write(SSL *s, int type, const unsigned char *buf,
         /* Need explicit part of IV for GCM mode */
         else if (mode == EVP_CIPH_GCM_MODE)
             eivlen = EVP_GCM_TLS_EXPLICIT_IV_LEN;
+        else if (mode == EVP_CIPH_CCM_MODE)
+            eivlen = EVP_CCM_TLS_EXPLICIT_IV_LEN;
         else
             eivlen = 0;
     } else

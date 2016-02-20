@@ -1,4 +1,3 @@
-/* ssl/ssl3.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -177,25 +176,6 @@ extern "C" {
 # define SSL3_CK_ADH_DES_64_CBC_SHA              0x0300001A
 # define SSL3_CK_ADH_DES_192_CBC_SHA             0x0300001B
 
-/*
- * VRS Additional Kerberos5 entries
- */
-# define SSL3_CK_KRB5_DES_64_CBC_SHA             0x0300001E
-# define SSL3_CK_KRB5_DES_192_CBC3_SHA           0x0300001F
-# define SSL3_CK_KRB5_RC4_128_SHA                0x03000020
-# define SSL3_CK_KRB5_IDEA_128_CBC_SHA           0x03000021
-# define SSL3_CK_KRB5_DES_64_CBC_MD5             0x03000022
-# define SSL3_CK_KRB5_DES_192_CBC3_MD5           0x03000023
-# define SSL3_CK_KRB5_RC4_128_MD5                0x03000024
-# define SSL3_CK_KRB5_IDEA_128_CBC_MD5           0x03000025
-
-# define SSL3_CK_KRB5_DES_40_CBC_SHA             0x03000026
-# define SSL3_CK_KRB5_RC2_40_CBC_SHA             0x03000027
-# define SSL3_CK_KRB5_RC4_40_SHA                 0x03000028
-# define SSL3_CK_KRB5_DES_40_CBC_MD5             0x03000029
-# define SSL3_CK_KRB5_RC2_40_CBC_MD5             0x0300002A
-# define SSL3_CK_KRB5_RC4_40_MD5                 0x0300002B
-
 # define SSL3_TXT_RSA_NULL_MD5                   "NULL-MD5"
 # define SSL3_TXT_RSA_NULL_SHA                   "NULL-SHA"
 # define SSL3_TXT_RSA_RC4_40_MD5                 "EXP-RC4-MD5"
@@ -238,22 +218,6 @@ extern "C" {
 # define SSL3_TXT_ADH_DES_40_CBC_SHA             "EXP-ADH-DES-CBC-SHA"
 # define SSL3_TXT_ADH_DES_64_CBC_SHA             "ADH-DES-CBC-SHA"
 # define SSL3_TXT_ADH_DES_192_CBC_SHA            "ADH-DES-CBC3-SHA"
-
-# define SSL3_TXT_KRB5_DES_64_CBC_SHA            "KRB5-DES-CBC-SHA"
-# define SSL3_TXT_KRB5_DES_192_CBC3_SHA          "KRB5-DES-CBC3-SHA"
-# define SSL3_TXT_KRB5_RC4_128_SHA               "KRB5-RC4-SHA"
-# define SSL3_TXT_KRB5_IDEA_128_CBC_SHA          "KRB5-IDEA-CBC-SHA"
-# define SSL3_TXT_KRB5_DES_64_CBC_MD5            "KRB5-DES-CBC-MD5"
-# define SSL3_TXT_KRB5_DES_192_CBC3_MD5          "KRB5-DES-CBC3-MD5"
-# define SSL3_TXT_KRB5_RC4_128_MD5               "KRB5-RC4-MD5"
-# define SSL3_TXT_KRB5_IDEA_128_CBC_MD5          "KRB5-IDEA-CBC-MD5"
-
-# define SSL3_TXT_KRB5_DES_40_CBC_SHA            "EXP-KRB5-DES-CBC-SHA"
-# define SSL3_TXT_KRB5_RC2_40_CBC_SHA            "EXP-KRB5-RC2-CBC-SHA"
-# define SSL3_TXT_KRB5_RC4_40_SHA                "EXP-KRB5-RC4-SHA"
-# define SSL3_TXT_KRB5_DES_40_CBC_MD5            "EXP-KRB5-DES-CBC-MD5"
-# define SSL3_TXT_KRB5_RC2_40_CBC_MD5            "EXP-KRB5-RC2-CBC-MD5"
-# define SSL3_TXT_KRB5_RC4_40_MD5                "EXP-KRB5-RC4-MD5"
 
 # define SSL3_SSL_SESSION_ID_LENGTH              32
 # define SSL3_MAX_SSL_SESSION_ID_LENGTH          32
@@ -342,7 +306,7 @@ extern "C" {
 # define SSL3_RT_ALERT                   21
 # define SSL3_RT_HANDSHAKE               22
 # define SSL3_RT_APPLICATION_DATA        23
-# define TLS1_RT_HEARTBEAT               24
+# define DTLS1_RT_HEARTBEAT              24
 
 /* Pseudo content types to indicate additional parameters */
 # define TLS1_RT_CRYPTO                  0x1000
@@ -395,127 +359,17 @@ extern "C" {
 # define SSL3_CT_NUMBER                  9
 
 # define SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS       0x0001
-# define SSL3_FLAGS_DELAY_CLIENT_FINISHED        0x0002
-# define SSL3_FLAGS_POP_BUFFER                   0x0004
-# define TLS1_FLAGS_TLS_PADDING_BUG              0x0008
+
+/* Removed from OpenSSL 1.1.0 */
+# define TLS1_FLAGS_TLS_PADDING_BUG              0x0
+
 # define TLS1_FLAGS_SKIP_CERT_VERIFY             0x0010
-# define TLS1_FLAGS_KEEP_HANDSHAKE               0x0020
-/*
- * Set when the handshake is ready to process peer's ChangeCipherSpec message.
- * Cleared after the message has been processed.
- */
-# define SSL3_FLAGS_CCS_OK                       0x0080
 
 /* Set if we encrypt then mac instead of usual mac then encrypt */
 # define TLS1_FLAGS_ENCRYPT_THEN_MAC             0x0100
 
-
-/* SSLv3 */
-/*
- * client
- */
-/* extra state */
-# define SSL3_ST_CW_FLUSH                (0x100|SSL_ST_CONNECT)
-# ifndef OPENSSL_NO_SCTP
-#  define DTLS1_SCTP_ST_CW_WRITE_SOCK                     (0x310|SSL_ST_CONNECT)
-#  define DTLS1_SCTP_ST_CR_READ_SOCK                      (0x320|SSL_ST_CONNECT)
-# endif
-/* write to server */
-# define SSL3_ST_CW_CLNT_HELLO_A         (0x110|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CLNT_HELLO_B         (0x111|SSL_ST_CONNECT)
-/* read from server */
-# define SSL3_ST_CR_SRVR_HELLO_A         (0x120|SSL_ST_CONNECT)
-# define SSL3_ST_CR_SRVR_HELLO_B         (0x121|SSL_ST_CONNECT)
-# define DTLS1_ST_CR_HELLO_VERIFY_REQUEST_A (0x126|SSL_ST_CONNECT)
-# define DTLS1_ST_CR_HELLO_VERIFY_REQUEST_B (0x127|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_A               (0x130|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_B               (0x131|SSL_ST_CONNECT)
-# define SSL3_ST_CR_KEY_EXCH_A           (0x140|SSL_ST_CONNECT)
-# define SSL3_ST_CR_KEY_EXCH_B           (0x141|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_REQ_A           (0x150|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_REQ_B           (0x151|SSL_ST_CONNECT)
-# define SSL3_ST_CR_SRVR_DONE_A          (0x160|SSL_ST_CONNECT)
-# define SSL3_ST_CR_SRVR_DONE_B          (0x161|SSL_ST_CONNECT)
-/* write to server */
-# define SSL3_ST_CW_CERT_A               (0x170|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CERT_B               (0x171|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CERT_C               (0x172|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CERT_D               (0x173|SSL_ST_CONNECT)
-# define SSL3_ST_CW_KEY_EXCH_A           (0x180|SSL_ST_CONNECT)
-# define SSL3_ST_CW_KEY_EXCH_B           (0x181|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CERT_VRFY_A          (0x190|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CERT_VRFY_B          (0x191|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CHANGE_A             (0x1A0|SSL_ST_CONNECT)
-# define SSL3_ST_CW_CHANGE_B             (0x1A1|SSL_ST_CONNECT)
-# ifndef OPENSSL_NO_NEXTPROTONEG
-#  define SSL3_ST_CW_NEXT_PROTO_A         (0x200|SSL_ST_CONNECT)
-#  define SSL3_ST_CW_NEXT_PROTO_B         (0x201|SSL_ST_CONNECT)
-# endif
-# define SSL3_ST_CW_FINISHED_A           (0x1B0|SSL_ST_CONNECT)
-# define SSL3_ST_CW_FINISHED_B           (0x1B1|SSL_ST_CONNECT)
-/* read from server */
-# define SSL3_ST_CR_CHANGE_A             (0x1C0|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CHANGE_B             (0x1C1|SSL_ST_CONNECT)
-# define SSL3_ST_CR_FINISHED_A           (0x1D0|SSL_ST_CONNECT)
-# define SSL3_ST_CR_FINISHED_B           (0x1D1|SSL_ST_CONNECT)
-# define SSL3_ST_CR_SESSION_TICKET_A     (0x1E0|SSL_ST_CONNECT)
-# define SSL3_ST_CR_SESSION_TICKET_B     (0x1E1|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_STATUS_A        (0x1F0|SSL_ST_CONNECT)
-# define SSL3_ST_CR_CERT_STATUS_B        (0x1F1|SSL_ST_CONNECT)
-
-/* server */
-/* extra state */
-# define SSL3_ST_SW_FLUSH                (0x100|SSL_ST_ACCEPT)
-# ifndef OPENSSL_NO_SCTP
-#  define DTLS1_SCTP_ST_SW_WRITE_SOCK                     (0x310|SSL_ST_ACCEPT)
-#  define DTLS1_SCTP_ST_SR_READ_SOCK                      (0x320|SSL_ST_ACCEPT)
-# endif
-/* read from client */
-/* Do not change the number values, they do matter */
-# define SSL3_ST_SR_CLNT_HELLO_A         (0x110|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CLNT_HELLO_B         (0x111|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CLNT_HELLO_C         (0x112|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CLNT_HELLO_D         (0x115|SSL_ST_ACCEPT)
-/* write to client */
-# define DTLS1_ST_SW_HELLO_VERIFY_REQUEST_A (0x113|SSL_ST_ACCEPT)
-# define DTLS1_ST_SW_HELLO_VERIFY_REQUEST_B (0x114|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_HELLO_REQ_A          (0x120|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_HELLO_REQ_B          (0x121|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_HELLO_REQ_C          (0x122|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SRVR_HELLO_A         (0x130|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SRVR_HELLO_B         (0x131|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_A               (0x140|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_B               (0x141|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_KEY_EXCH_A           (0x150|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_KEY_EXCH_B           (0x151|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_REQ_A           (0x160|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_REQ_B           (0x161|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SRVR_DONE_A          (0x170|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SRVR_DONE_B          (0x171|SSL_ST_ACCEPT)
-/* read from client */
-# define SSL3_ST_SR_CERT_A               (0x180|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CERT_B               (0x181|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_KEY_EXCH_A           (0x190|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_KEY_EXCH_B           (0x191|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CERT_VRFY_A          (0x1A0|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CERT_VRFY_B          (0x1A1|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CHANGE_A             (0x1B0|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_CHANGE_B             (0x1B1|SSL_ST_ACCEPT)
-# ifndef OPENSSL_NO_NEXTPROTONEG
-#  define SSL3_ST_SR_NEXT_PROTO_A         (0x210|SSL_ST_ACCEPT)
-#  define SSL3_ST_SR_NEXT_PROTO_B         (0x211|SSL_ST_ACCEPT)
-# endif
-# define SSL3_ST_SR_FINISHED_A           (0x1C0|SSL_ST_ACCEPT)
-# define SSL3_ST_SR_FINISHED_B           (0x1C1|SSL_ST_ACCEPT)
-/* write to client */
-# define SSL3_ST_SW_CHANGE_A             (0x1D0|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CHANGE_B             (0x1D1|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_FINISHED_A           (0x1E0|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_FINISHED_B           (0x1E1|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SESSION_TICKET_A     (0x1F0|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_SESSION_TICKET_B     (0x1F1|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_STATUS_A        (0x200|SSL_ST_ACCEPT)
-# define SSL3_ST_SW_CERT_STATUS_B        (0x201|SSL_ST_ACCEPT)
+/* Set if extended master secret extension received from peer */
+# define TLS1_FLAGS_RECEIVED_EXTMS               0x0200
 
 # define SSL3_MT_HELLO_REQUEST                   0
 # define SSL3_MT_CLIENT_HELLO                    1
@@ -533,6 +387,9 @@ extern "C" {
 #  define SSL3_MT_NEXT_PROTO                      67
 # endif
 # define DTLS1_MT_HELLO_VERIFY_REQUEST    3
+
+/* Dummy message type for handling CCS like a normal handshake message */
+# define SSL3_MT_CHANGE_CIPHER_SPEC              0x0101
 
 # define SSL3_MT_CCS                             1
 

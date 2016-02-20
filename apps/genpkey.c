@@ -89,6 +89,7 @@ OPTIONS genpkey_options[] = {
 #ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 #endif
+    /* This is deliberately last. */
     {OPT_HELP_STR, 1, 1,
      "Order of options may be important!  See the documentation.\n"},
     {NULL}
@@ -104,6 +105,7 @@ int genpkey_main(int argc, char **argv)
     const EVP_CIPHER *cipher = NULL;
     OPTION_CHOICE o;
     int outformat = FORMAT_PEM, text = 0, ret = 1, rv, do_param = 0;
+    int private = 0;
 
     prog = opt_init(argc, argv, genpkey_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -124,7 +126,6 @@ int genpkey_main(int argc, char **argv)
         case OPT_OUT:
             outfile = opt_arg();
             break;
-
         case OPT_PASS:
             passarg = opt_arg();
             break;
@@ -169,7 +170,10 @@ int genpkey_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
+
+    private = do_param ? 0 : 1;
 
     if (ctx == NULL)
         goto opthelp;
@@ -179,7 +183,7 @@ int genpkey_main(int argc, char **argv)
         goto end;
     }
 
-    out = bio_open_default(outfile, "wb");
+    out = bio_open_owner(outfile, outformat, private);
     if (out == NULL)
         goto end;
 
@@ -202,11 +206,13 @@ int genpkey_main(int argc, char **argv)
 
     if (do_param)
         rv = PEM_write_bio_Parameters(out, pkey);
-    else if (outformat == FORMAT_PEM)
+    else if (outformat == FORMAT_PEM) {
+        assert(private);
         rv = PEM_write_bio_PrivateKey(out, pkey, cipher, NULL, 0, NULL, pass);
-    else if (outformat == FORMAT_ASN1)
+    } else if (outformat == FORMAT_ASN1) {
+        assert(private);
         rv = i2d_PrivateKey_bio(out, pkey);
-    else {
+    } else {
         BIO_printf(bio_err, "Bad format specified for key\n");
         goto end;
     }
@@ -265,7 +271,7 @@ static int init_keygen_file(EVP_PKEY_CTX **pctx, const char *file, ENGINE *e)
     }
 
     ctx = EVP_PKEY_CTX_new(pkey, e);
-    if (!ctx)
+    if (ctx == NULL)
         goto err;
     if (EVP_PKEY_keygen_init(ctx) <= 0)
         goto err;

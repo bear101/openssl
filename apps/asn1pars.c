@@ -81,7 +81,7 @@ OPTIONS asn1parse_options[] = {
     {"inform", OPT_INFORM, 'F', "input format - one of DER PEM"},
     {"in", OPT_IN, '<', "input file"},
     {"out", OPT_OUT, '>', "output file (output format is always DER)"},
-    {"i", OPT_INDENT, 0, "entries"},
+    {"i", OPT_INDENT, 0, "indents the output"},
     {"noout", OPT_NOOUT, 0, "don't produce any output"},
     {"offset", OPT_OFFSET, 'p', "offset into file"},
     {"length", OPT_LENGTH, 'p', "length of section in file"},
@@ -140,7 +140,7 @@ int asn1parse_main(int argc, char **argv)
         case OPT_INFORM:
             if (!opt_format(opt_arg(), OPT_FMT_PEMDER, &informat))
                 goto opthelp;
-            goto end;
+            break;
         case OPT_IN:
             infile = opt_arg();
             break;
@@ -184,20 +184,21 @@ int asn1parse_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
     if (oidfile != NULL) {
-        in = bio_open_default(oidfile, "r");
+        in = bio_open_default(oidfile, 'r', FORMAT_TEXT);
         if (in == NULL)
             goto end;
         OBJ_create_objects(in);
         BIO_free(in);
     }
 
-    if ((in = bio_open_default(infile, "r")) == NULL)
+    if ((in = bio_open_default(infile, 'r', informat)) == NULL)
         goto end;
 
-    if (derfile && (derout = bio_open_default(derfile, "wb")) == NULL)
+    if (derfile && (derout = bio_open_default(derfile, 'w', FORMAT_ASN1)) == NULL)
         goto end;
 
     if (strictpem) {
@@ -276,9 +277,9 @@ int asn1parse_main(int argc, char **argv)
             }
             typ = ASN1_TYPE_get(at);
             if ((typ == V_ASN1_OBJECT)
+                || (typ == V_ASN1_BOOLEAN)
                 || (typ == V_ASN1_NULL)) {
-                BIO_printf(bio_err, "Can't parse %s type\n",
-                           typ == V_ASN1_NULL ? "NULL" : "OBJECT");
+                BIO_printf(bio_err, "Can't parse %s type\n", ASN1_tag2str(typ));
                 ERR_print_errors(bio_err);
                 goto end;
             }
@@ -334,14 +335,12 @@ static int do_generate(char *genstr, char *genconf, BUF_MEM *buf)
 {
     CONF *cnf = NULL;
     int len;
-    long errline = 0;
     unsigned char *p;
     ASN1_TYPE *atyp = NULL;
 
     if (genconf) {
-        cnf = NCONF_new(NULL);
-        if (!NCONF_load(cnf, genconf, &errline))
-            goto conferr;
+        if ((cnf = app_load_config(genconf)) == NULL)
+            goto err;
         if (!genstr)
             genstr = NCONF_get_string(cnf, "default", "asn1");
         if (!genstr) {
@@ -372,18 +371,8 @@ static int do_generate(char *genstr, char *genconf, BUF_MEM *buf)
     ASN1_TYPE_free(atyp);
     return len;
 
- conferr:
-
-    if (errline > 0)
-        BIO_printf(bio_err, "Error on line %ld of config file '%s'\n",
-                   errline, genconf);
-    else
-        BIO_printf(bio_err, "Error loading config file '%s'\n", genconf);
-
  err:
     NCONF_free(cnf);
     ASN1_TYPE_free(atyp);
-
     return -1;
-
 }

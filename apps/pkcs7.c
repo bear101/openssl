@@ -191,9 +191,10 @@ int pkcs7_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
-    in = bio_open_default(infile, RB(informat));
+    in = bio_open_default(infile, 'r', informat);
     if (in == NULL)
         goto end;
 
@@ -207,7 +208,7 @@ int pkcs7_main(int argc, char **argv)
         goto end;
     }
 
-    out = bio_open_default(outfile, WB(outformat));
+    out = bio_open_default(outfile, 'w', outformat);
     if (out == NULL)
         goto end;
 

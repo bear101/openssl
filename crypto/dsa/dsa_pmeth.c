@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/evp.h>
@@ -82,7 +82,7 @@ static int pkey_dsa_init(EVP_PKEY_CTX *ctx)
 {
     DSA_PKEY_CTX *dctx;
     dctx = OPENSSL_malloc(sizeof(*dctx));
-    if (!dctx)
+    if (dctx == NULL)
         return 0;
     dctx->nbits = 1024;
     dctx->qbits = 160;
@@ -125,10 +125,15 @@ static int pkey_dsa_sign(EVP_PKEY_CTX *ctx, unsigned char *sig,
     DSA_PKEY_CTX *dctx = ctx->data;
     DSA *dsa = ctx->pkey->pkey.dsa;
 
-    if (dctx->md)
+    if (dctx->md) {
+        if (tbslen != (size_t)EVP_MD_size(dctx->md))
+            return 0;
         type = EVP_MD_type(dctx->md);
-    else
+    } else {
+        if (tbslen != SHA_DIGEST_LENGTH)
+            return 0;
         type = NID_sha1;
+    }
 
     ret = DSA_sign(type, tbs, tbslen, sig, &sltmp, dsa);
 
@@ -146,10 +151,15 @@ static int pkey_dsa_verify(EVP_PKEY_CTX *ctx,
     DSA_PKEY_CTX *dctx = ctx->data;
     DSA *dsa = ctx->pkey->pkey.dsa;
 
-    if (dctx->md)
+    if (dctx->md) {
+        if (tbslen != (size_t)EVP_MD_size(dctx->md))
+            return 0;
         type = EVP_MD_type(dctx->md);
-    else
+    } else {
+        if (tbslen != SHA_DIGEST_LENGTH)
+            return 0;
         type = NID_sha1;
+    }
 
     ret = DSA_verify(type, tbs, tbslen, sig, siglen, dsa);
 
@@ -245,13 +255,13 @@ static int pkey_dsa_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
     int ret;
     if (ctx->pkey_gencb) {
         pcb = BN_GENCB_new();
-        if (!pcb)
+        if (pcb == NULL)
             return 0;
         evp_pkey_set_cb_translate(pcb, ctx);
     } else
         pcb = NULL;
     dsa = DSA_new();
-    if (!dsa) {
+    if (dsa == NULL) {
         BN_GENCB_free(pcb);
         return 0;
     }
@@ -273,7 +283,7 @@ static int pkey_dsa_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
         return 0;
     }
     dsa = DSA_new();
-    if (!dsa)
+    if (dsa == NULL)
         return 0;
     EVP_PKEY_assign_DSA(pkey, dsa);
     /* Note: if error return, pkey is freed by parent routine */

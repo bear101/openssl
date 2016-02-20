@@ -1,4 +1,3 @@
-/* crypto/pem/pem_pkey.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +56,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/objects.h>
 #include <openssl/evp.h>
@@ -72,6 +71,7 @@
 # include <openssl/dh.h>
 #endif
 #include "internal/asn1_int.h"
+#include "internal/evp_int.h"
 
 int pem_check_suffix(const char *pem_str, const char *suffix);
 
@@ -173,7 +173,7 @@ EVP_PKEY *PEM_read_bio_Parameters(BIO *bp, EVP_PKEY **x)
 
     if ((slen = pem_check_suffix(nm, "PARAMETERS")) > 0) {
         ret = EVP_PKEY_new();
-        if (!ret)
+        if (ret == NULL)
             goto err;
         if (!EVP_PKEY_set_type_str(ret, nm, slen)
             || !ret->ameth->param_decode

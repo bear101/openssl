@@ -1,4 +1,3 @@
-/* bio_asn1.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL
  * project.
@@ -147,7 +146,7 @@ static int asn1_bio_new(BIO *b)
 {
     BIO_ASN1_BUF_CTX *ctx;
     ctx = OPENSSL_malloc(sizeof(*ctx));
-    if (!ctx)
+    if (ctx == NULL)
         return 0;
     if (!asn1_bio_init(ctx, DEFAULT_ASN1_BUF_SIZE)) {
         OPENSSL_free(ctx);
@@ -162,7 +161,7 @@ static int asn1_bio_new(BIO *b)
 static int asn1_bio_init(BIO_ASN1_BUF_CTX *ctx, int size)
 {
     ctx->buf = OPENSSL_malloc(size);
-    if (!ctx->buf)
+    if (ctx->buf == NULL)
         return 0;
     ctx->bufsize = size;
     ctx->bufpos = 0;

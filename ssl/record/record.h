@@ -1,4 +1,3 @@
-/* ssl/record/record.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -109,8 +108,6 @@
  *
  */
 
-#include <openssl/pqueue.h>
-
 /*****************************************************************************
  *                                                                           *
  * These structures should be considered PRIVATE to the record layer. No     *
@@ -132,6 +129,10 @@ typedef struct ssl3_buffer_st {
 #define SEQ_NUM_SIZE                            8
 
 typedef struct ssl3_record_st {
+    /* Record layer version */
+    /* r */
+    int rec_version;
+
     /* type of record */
     /* r */
     int type;
@@ -182,7 +183,7 @@ typedef struct dtls1_bitmap_st {
 
 typedef struct record_pqueue_st {
     unsigned short epoch;
-    pqueue q;
+    struct pqueue_st *q;
 } record_pqueue;
 
 typedef struct dtls1_record_data_st {
@@ -284,8 +285,8 @@ typedef struct record_layer_st {
     int wpend_ret;
     const unsigned char *wpend_buf;
 
-    unsigned char read_sequence[8];
-    unsigned char write_sequence[8];
+    unsigned char read_sequence[SEQ_NUM_SIZE];
+    unsigned char write_sequence[SEQ_NUM_SIZE];
     
     DTLS_RECORD_LAYER *d;
 } RECORD_LAYER;
@@ -297,6 +298,8 @@ typedef struct record_layer_st {
  * record layer. Any libssl code may call these functions/macros             *
  *                                                                           *
  *****************************************************************************/
+
+#define MIN_SSL2_RECORD_LEN     9
 
 #define RECORD_LAYER_set_read_ahead(rl, ra)     ((rl)->read_ahead = (ra))
 #define RECORD_LAYER_get_read_ahead(rl)         ((rl)->read_ahead)
@@ -315,17 +318,17 @@ void RECORD_LAYER_release(RECORD_LAYER *rl);
 int RECORD_LAYER_read_pending(RECORD_LAYER *rl);
 int RECORD_LAYER_write_pending(RECORD_LAYER *rl);
 int RECORD_LAYER_set_data(RECORD_LAYER *rl, const unsigned char *buf, int len);
-void RECORD_LAYER_dup(RECORD_LAYER *dst, RECORD_LAYER *src);
 void RECORD_LAYER_reset_read_sequence(RECORD_LAYER *rl);
 void RECORD_LAYER_reset_write_sequence(RECORD_LAYER *rl);
 int RECORD_LAYER_setup_comp_buffer(RECORD_LAYER *rl);
+int RECORD_LAYER_is_sslv2_record(RECORD_LAYER *rl);
+unsigned int RECORD_LAYER_get_rrec_length(RECORD_LAYER *rl);
 __owur int ssl3_pending(const SSL *s);
-__owur int ssl23_read_bytes(SSL *s, int n);
-__owur int ssl23_write_bytes(SSL *s);
 __owur int ssl3_write_bytes(SSL *s, int type, const void *buf, int len);
 __owur int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
                          unsigned int len, int create_empty_fragment);
-__owur int ssl3_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek);
+__owur int ssl3_read_bytes(SSL *s, int type, int *recvd_type,
+                           unsigned char *buf, int len, int peek);
 __owur int ssl3_setup_buffers(SSL *s);
 __owur int ssl3_enc(SSL *s, int send_data);
 __owur int n_ssl3_mac(SSL *ssl, unsigned char *md, int send_data);
@@ -339,7 +342,9 @@ void DTLS_RECORD_LAYER_clear(RECORD_LAYER *rl);
 void DTLS_RECORD_LAYER_set_saved_w_epoch(RECORD_LAYER *rl, unsigned short e);
 void DTLS_RECORD_LAYER_clear(RECORD_LAYER *rl);
 void DTLS_RECORD_LAYER_resync_write(RECORD_LAYER *rl);
-__owur int dtls1_read_bytes(SSL *s, int type, unsigned char *buf, int len, int peek);
+void DTLS_RECORD_LAYER_set_write_sequence(RECORD_LAYER *rl, unsigned char *seq);
+__owur int dtls1_read_bytes(SSL *s, int type, int *recvd_type,
+                            unsigned char *buf, int len, int peek);
 __owur int dtls1_write_bytes(SSL *s, int type, const void *buf, int len);
 __owur int do_dtls1_write(SSL *s, int type, const unsigned char *buf,
                    unsigned int len, int create_empty_fragement);

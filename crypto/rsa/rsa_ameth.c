@@ -1,4 +1,3 @@
-/* crypto/rsa/rsa_ameth.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2006.
@@ -58,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/rsa.h>
@@ -67,11 +66,14 @@
 # include <openssl/cms.h>
 #endif
 #include "internal/asn1_int.h"
+#include "internal/evp_int.h"
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_sign(CMS_SignerInfo *si);
 static int rsa_cms_verify(CMS_SignerInfo *si);
 static int rsa_cms_decrypt(CMS_RecipientInfo *ri);
 static int rsa_cms_encrypt(CMS_RecipientInfo *ri);
+#endif
 
 static int rsa_pub_encode(X509_PUBKEY *pk, const EVP_PKEY *pkey)
 {
@@ -93,9 +95,10 @@ static int rsa_pub_decode(EVP_PKEY *pkey, X509_PUBKEY *pubkey)
     const unsigned char *p;
     int pklen;
     RSA *rsa = NULL;
+
     if (!X509_PUBKEY_get0_param(NULL, &p, &pklen, NULL, pubkey))
         return 0;
-    if (!(rsa = d2i_RSAPublicKey(NULL, &p, pklen))) {
+    if ((rsa = d2i_RSAPublicKey(NULL, &p, pklen)) == NULL) {
         RSAerr(RSA_F_RSA_PUB_DECODE, ERR_R_RSA_LIB);
         return 0;
     }
@@ -115,7 +118,8 @@ static int old_rsa_priv_decode(EVP_PKEY *pkey,
                                const unsigned char **pder, int derlen)
 {
     RSA *rsa;
-    if (!(rsa = d2i_RSAPrivateKey(NULL, pder, derlen))) {
+
+    if ((rsa = d2i_RSAPrivateKey(NULL, pder, derlen)) == NULL) {
         RSAerr(RSA_F_OLD_RSA_PRIV_DECODE, ERR_R_RSA_LIB);
         return 0;
     }
@@ -445,7 +449,7 @@ static int rsa_md_to_algor(X509_ALGOR **palg, const EVP_MD *md)
     if (EVP_MD_type(md) == NID_sha1)
         return 1;
     *palg = X509_ALGOR_new();
-    if (!*palg)
+    if (*palg == NULL)
         return 0;
     X509_ALGOR_set_md(*palg, md);
     return 1;
@@ -465,7 +469,7 @@ static int rsa_md_to_mgf1(X509_ALGOR **palg, const EVP_MD *mgf1md)
     if (!ASN1_item_pack(algtmp, ASN1_ITEM_rptr(X509_ALGOR), &stmp))
          goto err;
     *palg = X509_ALGOR_new();
-    if (!*palg)
+    if (*palg == NULL)
         goto err;
     X509_ALGOR_set0(*palg, OBJ_nid2obj(NID_mgf1), V_ASN1_SEQUENCE, stmp);
     stmp = NULL;
@@ -538,11 +542,11 @@ static ASN1_STRING *rsa_ctx_to_pss(EVP_PKEY_CTX *pkctx)
             saltlen--;
     }
     pss = RSA_PSS_PARAMS_new();
-    if (!pss)
+    if (pss == NULL)
         goto err;
     if (saltlen != 20) {
         pss->saltLength = ASN1_INTEGER_new();
-        if (!pss->saltLength)
+        if (pss->saltLength == NULL)
             goto err;
         if (!ASN1_INTEGER_set(pss->saltLength, saltlen))
             goto err;
@@ -565,7 +569,7 @@ static ASN1_STRING *rsa_ctx_to_pss(EVP_PKEY_CTX *pkctx)
 
 /*
  * From PSS AlgorithmIdentifier set public key parameters. If pkey isn't NULL
- * then the EVP_MD_CTX is setup and initalised. If it is NULL parameters are
+ * then the EVP_MD_CTX is setup and initialised. If it is NULL parameters are
  * passed to pkctx instead.
  */
 
@@ -651,6 +655,7 @@ static int rsa_pss_to_ctx(EVP_MD_CTX *ctx, EVP_PKEY_CTX *pkctx,
     return rv;
 }
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_verify(CMS_SignerInfo *si)
 {
     int nid, nid2;
@@ -669,6 +674,7 @@ static int rsa_cms_verify(CMS_SignerInfo *si)
     }
     return 0;
 }
+#endif
 
 /*
  * Customised RSA item verification routine. This is called when a signature
@@ -691,6 +697,7 @@ static int rsa_item_verify(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
     return -1;
 }
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_sign(CMS_SignerInfo *si)
 {
     int pad_mode = RSA_PKCS1_PADDING;
@@ -715,13 +722,14 @@ static int rsa_cms_sign(CMS_SignerInfo *si)
     X509_ALGOR_set0(alg, OBJ_nid2obj(NID_rsassaPss), V_ASN1_SEQUENCE, os);
     return 1;
 }
+#endif
 
 static int rsa_item_sign(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
                          X509_ALGOR *alg1, X509_ALGOR *alg2,
                          ASN1_BIT_STRING *sig)
 {
     int pad_mode;
-    EVP_PKEY_CTX *pkctx = ctx->pctx;
+    EVP_PKEY_CTX *pkctx = EVP_MD_CTX_pkey_ctx(ctx);
     if (EVP_PKEY_CTX_get_rsa_padding(pkctx, &pad_mode) <= 0)
         return 0;
     if (pad_mode == RSA_PKCS1_PADDING)
@@ -748,6 +756,7 @@ static int rsa_item_sign(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
     return 2;
 }
 
+#ifndef OPENSSL_NO_CMS
 static RSA_OAEP_PARAMS *rsa_oaep_decode(const X509_ALGOR *alg,
                                         X509_ALGOR **pmaskHash)
 {
@@ -867,7 +876,7 @@ static int rsa_cms_encrypt(CMS_RecipientInfo *ri)
     if (labellen < 0)
         goto err;
     oaep = RSA_OAEP_PARAMS_new();
-    if (!oaep)
+    if (oaep == NULL)
         goto err;
     if (!rsa_md_to_algor(&oaep->hashFunc, md))
         goto err;
@@ -876,9 +885,9 @@ static int rsa_cms_encrypt(CMS_RecipientInfo *ri)
     if (labellen > 0) {
         ASN1_OCTET_STRING *los = ASN1_OCTET_STRING_new();
         oaep->pSourceFunc = X509_ALGOR_new();
-        if (!oaep->pSourceFunc)
+        if (oaep->pSourceFunc == NULL)
             goto err;
-        if (!los)
+        if (los == NULL)
             goto err;
         if (!ASN1_OCTET_STRING_set(los, label, labellen)) {
             ASN1_OCTET_STRING_free(los);
@@ -898,6 +907,7 @@ static int rsa_cms_encrypt(CMS_RecipientInfo *ri)
     ASN1_STRING_free(os);
     return rv;
 }
+#endif
 
 const EVP_PKEY_ASN1_METHOD rsa_asn1_meths[] = {
     {

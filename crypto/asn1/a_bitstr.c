@@ -1,4 +1,3 @@
-/* crypto/asn1/a_bitstr.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +56,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include "asn1_locl.h"
 
@@ -204,7 +203,7 @@ int ASN1_BIT_STRING_set_bit(ASN1_BIT_STRING *a, int n, int value)
     if ((a->length < (w + 1)) || (a->data == NULL)) {
         if (!value)
             return (1);         /* Don't need to set */
-        c = OPENSSL_realloc_clean(a->data, a->length, w + 1);
+        c = OPENSSL_clear_realloc(a->data, a->length, w + 1);
         if (c == NULL) {
             ASN1err(ASN1_F_ASN1_BIT_STRING_SET_BIT, ERR_R_MALLOC_FAILURE);
             return 0;

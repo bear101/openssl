@@ -69,8 +69,10 @@
  */
 
 #include <openssl/opensslconf.h>
-#ifndef OPENSSL_NO_EC
-# include <assert.h>
+#ifdef OPENSSL_NO_EC
+NON_EMPTY_TRANSLATION_UNIT
+#else
+
 # include <stdio.h>
 # include <stdlib.h>
 # include <time.h>
@@ -117,14 +119,14 @@ OPTIONS ecparam_options[] = {
     {NULL}
 };
 
-OPT_PAIR forms[] = {
+static OPT_PAIR forms[] = {
     {"compressed", POINT_CONVERSION_COMPRESSED},
     {"uncompressed", POINT_CONVERSION_UNCOMPRESSED},
     {"hybrid", POINT_CONVERSION_HYBRID},
     {NULL}
 };
 
-OPT_PAIR encodings[] = {
+static OPT_PAIR encodings[] = {
     {"named_curve", OPENSSL_EC_NAMED_CURVE},
     {"explicit", 0},
     {NULL}
@@ -142,8 +144,8 @@ int ecparam_main(int argc, char **argv)
     unsigned char *buffer = NULL;
     OPTION_CHOICE o;
     int asn1_flag = OPENSSL_EC_NAMED_CURVE, new_asn1_flag = 0;
-    int informat = FORMAT_PEM, outformat = FORMAT_PEM, noout = 0, C = 0, ret =
-        1;
+    int informat = FORMAT_PEM, outformat = FORMAT_PEM, noout = 0, C = 0;
+    int ret = 1, private = 0;
     int list_curves = 0, no_seed = 0, check = 0, new_form = 0;
     int text = 0, i, need_rand = 0, genkey = 0;
 
@@ -218,12 +220,15 @@ int ecparam_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
-    in = bio_open_default(infile, RB(informat));
+    private = genkey ? 1 : 0;
+
+    in = bio_open_default(infile, 'r', informat);
     if (in == NULL)
         goto end;
-    out = bio_open_default(outfile, WB(outformat));
+    out = bio_open_owner(outfile, outformat, private);
     if (out == NULL)
         goto end;
 
@@ -317,14 +322,13 @@ int ecparam_main(int argc, char **argv)
     }
 
     if (check) {
-        if (group == NULL)
-            BIO_printf(bio_err, "no elliptic curve parameters\n");
         BIO_printf(bio_err, "checking elliptic curve parameters: ");
         if (!EC_GROUP_check(group, NULL)) {
             BIO_printf(bio_err, "failed\n");
             ERR_print_errors(bio_err);
-        } else
-            BIO_printf(bio_err, "ok\n");
+            goto end;
+        }
+        BIO_printf(bio_err, "ok\n");
 
     }
 
@@ -463,13 +467,20 @@ int ecparam_main(int argc, char **argv)
 
         assert(need_rand);
 
-        if (EC_KEY_set_group(eckey, group) == 0)
-            goto end;
-
-        if (!EC_KEY_generate_key(eckey)) {
+        if (EC_KEY_set_group(eckey, group) == 0) {
+            BIO_printf(bio_err, "unable to set group when generating key\n");
             EC_KEY_free(eckey);
+            ERR_print_errors(bio_err);
             goto end;
         }
+
+        if (!EC_KEY_generate_key(eckey)) {
+            BIO_printf(bio_err, "unable to generate key\n");
+            EC_KEY_free(eckey);
+            ERR_print_errors(bio_err);
+            goto end;
+        }
+        assert(private);
         if (outformat == FORMAT_ASN1)
             i = i2d_ECPrivateKey_bio(out, eckey);
         else
@@ -495,11 +506,5 @@ int ecparam_main(int argc, char **argv)
     EC_GROUP_free(group);
     return (ret);
 }
-
-#else                           /* !OPENSSL_NO_EC */
-
-# if PEDANTIC
-static void *dummy = &dummy;
-# endif
 
 #endif

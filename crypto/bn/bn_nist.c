@@ -1,4 +1,3 @@
-/* crypto/bn/bn_nist.c */
 /*
  * Written by Nils Larsch for the OpenSSL project
  */
@@ -57,7 +56,7 @@
  */
 
 #include "bn_lcl.h"
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #define BN_NIST_192_TOP (192+BN_BITS2-1)/BN_BITS2
 #define BN_NIST_224_TOP (224+BN_BITS2-1)/BN_BITS2
@@ -645,7 +644,7 @@ int BN_nist_mod_224(BIGNUM *r, const BIGNUM *a, const BIGNUM *field,
 #endif
     } else if (carry < 0) {
         /*
-         * it's a bit more comlicated logic in this case. if bn_add_words
+         * it's a bit more complicated logic in this case. if bn_add_words
          * yields no carry, then result has to be adjusted by unconditionally
          * *adding* the modulus. but if it does, then result has to be
          * compared to the modulus and conditionally adjusted by

@@ -1,4 +1,3 @@
-/* crypto/ripemd/ripemd.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -67,7 +66,7 @@ extern "C" {
 #endif
 
 # ifdef OPENSSL_NO_RMD160
-#  error RIPEMD is disabled.
+#  error RMD160 is disabled.
 # endif
 
 # define RIPEMD160_LONG unsigned int

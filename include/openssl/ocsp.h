@@ -1,11 +1,10 @@
-/* ocsp.h */
 /*
  * Written by Tom Titchener <Tom_Titchener@groove.net> for the OpenSSL
  * project.
  */
 
 /*
- * History: This file was transfered to Richard Levitte from CertCo by Kathy
+ * History: This file was transferred to Richard Levitte from CertCo by Kathy
  * Weinhold in mid-spring 2000 to be included in OpenSSL or released as a
  * patch kit.
  */
@@ -95,11 +94,11 @@ extern "C" {
 
 typedef struct ocsp_cert_id_st OCSP_CERTID;
 
-DECLARE_STACK_OF(OCSP_CERTID)
+DEFINE_STACK_OF(OCSP_CERTID)
 
 typedef struct ocsp_one_request_st OCSP_ONEREQ;
 
-DECLARE_STACK_OF(OCSP_ONEREQ)
+DEFINE_STACK_OF(OCSP_ONEREQ)
 
 typedef struct ocsp_req_info_st OCSP_REQINFO;
 typedef struct ocsp_signature_st OCSP_SIGNATURE;
@@ -117,7 +116,7 @@ typedef struct ocsp_resp_bytes_st OCSP_RESPBYTES;
 # define V_OCSP_RESPID_NAME 0
 # define V_OCSP_RESPID_KEY  1
 
-DECLARE_STACK_OF(OCSP_RESPID)
+DEFINE_STACK_OF(OCSP_RESPID)
 DECLARE_ASN1_FUNCTIONS(OCSP_RESPID)
 
 typedef struct ocsp_revoked_info_st OCSP_REVOKEDINFO;
@@ -129,7 +128,7 @@ typedef struct ocsp_revoked_info_st OCSP_REVOKEDINFO;
 typedef struct ocsp_cert_status_st OCSP_CERTSTATUS;
 typedef struct ocsp_single_response_st OCSP_SINGLERESP;
 
-DECLARE_STACK_OF(OCSP_SINGLERESP)
+DEFINE_STACK_OF(OCSP_SINGLERESP)
 
 typedef struct ocsp_response_data_st OCSP_RESPDATA;
 
@@ -186,19 +185,19 @@ typedef struct ocsp_service_locator_st OCSP_SERVICELOC;
 
 # define OCSP_REQUEST_sign(o,pkey,md) \
         ASN1_item_sign(ASN1_ITEM_rptr(OCSP_REQINFO),\
-                o->optionalSignature->signatureAlgorithm,NULL,\
-                o->optionalSignature->signature,o->tbsRequest,pkey,md)
+                &o->optionalSignature->signatureAlgorithm,NULL,\
+                o->optionalSignature->signature,&o->tbsRequest,pkey,md)
 
 # define OCSP_BASICRESP_sign(o,pkey,md,d) \
-        ASN1_item_sign(ASN1_ITEM_rptr(OCSP_RESPDATA),o->signatureAlgorithm,NULL,\
-                o->signature,o->tbsResponseData,pkey,md)
+        ASN1_item_sign(ASN1_ITEM_rptr(OCSP_RESPDATA),&o->signatureAlgorithm,NULL,\
+                o->signature,&o->tbsResponseData,pkey,md)
 
 # define OCSP_REQUEST_verify(a,r) ASN1_item_verify(ASN1_ITEM_rptr(OCSP_REQINFO),\
-        a->optionalSignature->signatureAlgorithm,\
-        a->optionalSignature->signature,a->tbsRequest,r)
+        &a->optionalSignature->signatureAlgorithm,\
+        a->optionalSignature->signature,&a->tbsRequest,r)
 
 # define OCSP_BASICRESP_verify(a,r,d) ASN1_item_verify(ASN1_ITEM_rptr(OCSP_RESPDATA),\
-        a->signatureAlgorithm,a->signature,a->tbsResponseData,r)
+        &a->signatureAlgorithm,a->signature,&a->tbsResponseData,r)
 
 # define ASN1_BIT_STRING_digest(data,type,md,len) \
         ASN1_item_digest(ASN1_ITEM_rptr(ASN1_BIT_STRING),type,data,md,len)
@@ -259,6 +258,7 @@ ASN1_OCTET_STRING *OCSP_resp_get0_signature(OCSP_BASICRESP *bs);
 
 int OCSP_resp_count(OCSP_BASICRESP *bs);
 OCSP_SINGLERESP *OCSP_resp_get0(OCSP_BASICRESP *bs, int idx);
+ASN1_GENERALIZEDTIME *OCSP_resp_get0_produced_at(OCSP_BASICRESP* bs);
 int OCSP_resp_find(OCSP_BASICRESP *bs, OCSP_CERTID *id, int last);
 int OCSP_single_get0_status(OCSP_SINGLERESP *single, int *reason,
                             ASN1_GENERALIZEDTIME **revtime,
@@ -359,6 +359,7 @@ void *OCSP_SINGLERESP_get1_ext_d2i(OCSP_SINGLERESP *x, int nid, int *crit,
 int OCSP_SINGLERESP_add1_ext_i2d(OCSP_SINGLERESP *x, int nid, void *value,
                                  int crit, unsigned long flags);
 int OCSP_SINGLERESP_add_ext(OCSP_SINGLERESP *x, X509_EXTENSION *ex, int loc);
+OCSP_CERTID *OCSP_SINGLERESP_get0_id(OCSP_SINGLERESP *x);
 
 DECLARE_ASN1_FUNCTIONS(OCSP_SINGLERESP)
 DECLARE_ASN1_FUNCTIONS(OCSP_CERTSTATUS)

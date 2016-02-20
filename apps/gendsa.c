@@ -55,8 +55,11 @@
  * [including the GNU Public Licence.]
  */
 
-#include <openssl/opensslconf.h> /* for OPENSSL_NO_DSA */
-#ifndef OPENSSL_NO_DSA
+#include <openssl/opensslconf.h>
+#ifdef OPENSSL_NO_DSA
+NON_EMPTY_TRANSLATION_UNIT
+#else
+
 # include <stdio.h>
 # include <string.h>
 # include <sys/types.h>
@@ -68,8 +71,6 @@
 # include <openssl/dsa.h>
 # include <openssl/x509.h>
 # include <openssl/pem.h>
-
-# define DEFBITS 512
 
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
@@ -84,10 +85,10 @@ OPTIONS gendsa_options[] = {
     {"passout", OPT_PASSOUT, 's'},
     {"rand", OPT_RAND, 's',
      "Load the file(s) into the random number generator"},
+    {"", OPT_CIPHER, '-', "Encrypt the output with any supported cipher"},
 # ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 # endif
-    {"", OPT_CIPHER, '-', "Encrypt the output with any supported cipher"},
     {NULL}
 };
 
@@ -99,7 +100,7 @@ int gendsa_main(int argc, char **argv)
     char *inrand = NULL, *dsaparams = NULL;
     char *outfile = NULL, *passoutarg = NULL, *passout = NULL, *prog;
     OPTION_CHOICE o;
-    int ret = 1;
+    int ret = 1, private = 0;
 
     prog = opt_init(argc, argv, gendsa_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -133,6 +134,7 @@ int gendsa_main(int argc, char **argv)
     }
     argc = opt_num_rest();
     argv = opt_rest();
+    private = 1;
 
     if (argc != 1)
         goto opthelp;
@@ -143,7 +145,7 @@ int gendsa_main(int argc, char **argv)
         goto end;
     }
 
-    in = bio_open_default(dsaparams, "r");
+    in = bio_open_default(dsaparams, 'r', FORMAT_PEM);
     if (in == NULL)
         goto end2;
 
@@ -154,7 +156,7 @@ int gendsa_main(int argc, char **argv)
     BIO_free(in);
     in = NULL;
 
-    out = bio_open_default(outfile, "w");
+    out = bio_open_owner(outfile, FORMAT_PEM, private);
     if (out == NULL)
         goto end2;
 
@@ -172,6 +174,7 @@ int gendsa_main(int argc, char **argv)
 
     app_RAND_write_file(NULL);
 
+    assert(private);
     if (!PEM_write_bio_DSAPrivateKey(out, dsa, enc, NULL, 0, NULL, passout))
         goto end;
     ret = 0;
@@ -185,10 +188,4 @@ int gendsa_main(int argc, char **argv)
     OPENSSL_free(passout);
     return (ret);
 }
-#else                           /* !OPENSSL_NO_DSA */
-
-# if PEDANTIC
-static void *dummy = &dummy;
-# endif
-
 #endif

@@ -1,4 +1,3 @@
-/* crypto/cms/cms_smime.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL
  * project.
@@ -52,7 +51,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
@@ -82,7 +81,7 @@ static int cms_copy_content(BIO *out, BIO *in, unsigned int flags)
 
     tmpout = cms_get_text_bio(out, flags);
 
-    if (!tmpout) {
+    if (tmpout == NULL) {
         CMSerr(CMS_F_CMS_COPY_CONTENT, ERR_R_MALLOC_FAILURE);
         goto err;
     }
@@ -253,7 +252,7 @@ CMS_ContentInfo *CMS_EncryptedData_encrypt(BIO *in, const EVP_CIPHER *cipher,
         return NULL;
     }
     cms = CMS_ContentInfo_new();
-    if (!cms)
+    if (cms == NULL)
         return NULL;
     if (!CMS_EncryptedData_set1_key(cms, cipher, key, keylen))
         return NULL;
@@ -386,7 +385,7 @@ int CMS_verify(CMS_ContentInfo *cms, STACK_OF(X509) *certs,
         tmpin = BIO_new_mem_buf(ptr, len);
         if (tmpin == NULL) {
             CMSerr(CMS_F_CMS_VERIFY, ERR_R_MALLOC_FAILURE);
-            return 0;
+            goto err2;
         }
     } else
         tmpin = dcont;
@@ -455,6 +454,7 @@ int CMS_verify(CMS_ContentInfo *cms, STACK_OF(X509) *certs,
     if (out != tmpout)
         BIO_free_all(tmpout);
 
+ err2:
     sk_X509_pop_free(cms_certs, X509_free);
     sk_X509_CRL_pop_free(crls, X509_CRL_free);
 
@@ -481,7 +481,7 @@ CMS_ContentInfo *CMS_sign(X509 *signcert, EVP_PKEY *pkey,
     int i;
 
     cms = CMS_ContentInfo_new();
-    if (!cms || !CMS_SignedData_init(cms))
+    if (cms == NULL || !CMS_SignedData_init(cms))
         goto merr;
     if (flags & CMS_ASCIICRLF
         && !CMS_set1_eContentType(cms,
@@ -801,8 +801,9 @@ int CMS_final(CMS_ContentInfo *cms, BIO *data, BIO *dcont, unsigned int flags)
 {
     BIO *cmsbio;
     int ret = 0;
-    if (!(cmsbio = CMS_dataInit(cms, dcont))) {
-        CMSerr(CMS_F_CMS_FINAL, ERR_R_MALLOC_FAILURE);
+
+    if ((cmsbio = CMS_dataInit(cms, dcont)) == NULL) {
+        CMSerr(CMS_F_CMS_FINAL, CMS_R_CMS_LIB);
         return 0;
     }
 

@@ -108,8 +108,11 @@
  *
  */
 
-#include <openssl/opensslconf.h> /* for OPENSSL_NO_DH */
-#ifndef OPENSSL_NO_DH
+#include <openssl/opensslconf.h>
+#ifdef OPENSSL_NO_DH
+NON_EMPTY_TRANSLATION_UNIT
+#else
+
 # include <stdio.h>
 # include <stdlib.h>
 # include <time.h>
@@ -153,12 +156,12 @@ OPTIONS dhparam_options[] = {
     {"C", OPT_C, '-', "Print C code"},
     {"2", OPT_2, '-', "Generate parameters using 2 as the generator value"},
     {"5", OPT_5, '-', "Generate parameters using 5 as the generator value"},
-# ifndef OPENSSL_NO_ENGINE
-    {"engine", OPT_ENGINE, 's', "Use engine e, possibly a hardware device"},
-# endif
 # ifndef OPENSSL_NO_DSA
     {"dsaparam", OPT_DSAPARAM, '-',
      "Read or generate DSA parameters, convert to DH"},
+# endif
+# ifndef OPENSSL_NO_ENGINE
+    {"engine", OPT_ENGINE, 's', "Use engine e, possibly a hardware device"},
 # endif
     {NULL}
 };
@@ -251,7 +254,7 @@ int dhparam_main(int argc, char **argv)
 
         BN_GENCB *cb;
         cb = BN_GENCB_new();
-        if (!cb) {
+        if (cb == NULL) {
             ERR_print_errors(bio_err);
             goto end;
         }
@@ -271,7 +274,7 @@ int dhparam_main(int argc, char **argv)
 
             BIO_printf(bio_err,
                        "Generating DSA parameters, %d bit long prime\n", num);
-            if (!dsa
+            if (dsa == NULL
                 || !DSA_generate_parameters_ex(dsa, num, NULL, 0, NULL, NULL,
                                                cb)) {
                 DSA_free(dsa);
@@ -295,7 +298,7 @@ int dhparam_main(int argc, char **argv)
                        "Generating DH parameters, %d bit long safe prime, generator %d\n",
                        num, g);
             BIO_printf(bio_err, "This is going to take a long time\n");
-            if (!dh || !DH_generate_parameters_ex(dh, num, g, cb)) {
+            if (dh == NULL || !DH_generate_parameters_ex(dh, num, g, cb)) {
                 BN_GENCB_free(cb);
                 ERR_print_errors(bio_err);
                 goto end;
@@ -306,7 +309,7 @@ int dhparam_main(int argc, char **argv)
         app_RAND_write_file(NULL);
     } else {
 
-        in = bio_open_default(infile, RB(informat));
+        in = bio_open_default(infile, 'r', informat);
         if (in == NULL)
             goto end;
 
@@ -349,7 +352,7 @@ int dhparam_main(int argc, char **argv)
         /* dh != NULL */
     }
 
-    out = bio_open_default(outfile, "w");
+    out = bio_open_default(outfile, 'w', outformat);
     if (out == NULL)
         goto end;
 
@@ -443,11 +446,4 @@ static int dh_cb(int p, int n, BN_GENCB *cb)
     (void)BIO_flush(BN_GENCB_get_arg(cb));
     return 1;
 }
-
-#else                           /* !OPENSSL_NO_DH */
-
-# if PEDANTIC
-static void *dummy = &dummy;
-# endif
-
 #endif

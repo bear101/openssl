@@ -1,4 +1,3 @@
-/* crypto/ec/ecp_nistp224.c */
 /*
  * Written by Emilia Kasper (Google) for the OpenSSL project.
  */
@@ -26,7 +25,9 @@
  */
 
 #include <openssl/opensslconf.h>
-#ifndef OPENSSL_NO_EC_NISTP_64_GCC_128
+#ifdef OPENSSL_NO_EC_NISTP_64_GCC_128
+NON_EMPTY_TRANSLATION_UNIT
+#else
 
 # include <stdint.h>
 # include <string.h>
@@ -227,10 +228,10 @@ static const felem gmul[2][16][3] = {
 };
 
 /* Precomputation for the group generator. */
-typedef struct {
+struct nistp224_pre_comp_st {
     felem g_pre_comp[2][16][3];
     int references;
-} NISTP224_PRE_COMP;
+};
 
 const EC_METHOD *EC_GFp_nistp224_method(void)
 {
@@ -1070,7 +1071,7 @@ static void select_point(const u64 idx, unsigned int size,
     unsigned i, j;
     limb *outlimbs = &out[0][0];
 
-    memset(out 0, sizeof(out));
+    memset(out, 0, sizeof(*out) * 3);
     for (i = 0; i < size; i++) {
         const limb *inlimbs = &pre_comp[i][0][0];
         u64 mask = i ^ idx;
@@ -1199,55 +1200,29 @@ static void batch_mul(felem x_out, felem y_out, felem z_out,
 
 static NISTP224_PRE_COMP *nistp224_pre_comp_new()
 {
-    NISTP224_PRE_COMP *ret = NULL;
-    ret = OPENSSL_malloc(sizeof(*ret));
+    NISTP224_PRE_COMP *ret = OPENSSL_zalloc(sizeof(*ret));
+
     if (!ret) {
         ECerr(EC_F_NISTP224_PRE_COMP_NEW, ERR_R_MALLOC_FAILURE);
         return ret;
     }
-    memset(ret->g_pre_comp, 0, sizeof(ret->g_pre_comp));
     ret->references = 1;
     return ret;
 }
 
-static void *nistp224_pre_comp_dup(void *src_)
+NISTP224_PRE_COMP *EC_nistp224_pre_comp_dup(NISTP224_PRE_COMP *p)
 {
-    NISTP224_PRE_COMP *src = src_;
-
-    /* no need to actually copy, these objects never change! */
-    CRYPTO_add(&src->references, 1, CRYPTO_LOCK_EC_PRE_COMP);
-
-    return src_;
+    if (p != NULL)
+        CRYPTO_add(&p->references, 1, CRYPTO_LOCK_EC_PRE_COMP);
+    return p;
 }
 
-static void nistp224_pre_comp_free(void *pre_)
+void EC_nistp224_pre_comp_free(NISTP224_PRE_COMP *p)
 {
-    int i;
-    NISTP224_PRE_COMP *pre = pre_;
-
-    if (!pre)
+    if (p == NULL
+        || CRYPTO_add(&p->references, -1, CRYPTO_LOCK_EC_PRE_COMP) > 0)
         return;
-
-    i = CRYPTO_add(&pre->references, -1, CRYPTO_LOCK_EC_PRE_COMP);
-    if (i > 0)
-        return;
-
-    OPENSSL_free(pre);
-}
-
-static void nistp224_pre_comp_clear_free(void *pre_)
-{
-    int i;
-    NISTP224_PRE_COMP *pre = pre_;
-
-    if (!pre)
-        return;
-
-    i = CRYPTO_add(&pre->references, -1, CRYPTO_LOCK_EC_PRE_COMP);
-    if (i > 0)
-        return;
-
-    OPENSSL_clear_free(pre, sizeof(*pre));
+    OPENSSL_free(p);
 }
 
 /******************************************************************************/
@@ -1414,10 +1389,7 @@ int ec_GFp_nistp224_points_mul(const EC_GROUP *group, EC_POINT *r,
         goto err;
 
     if (scalar != NULL) {
-        pre = EC_EX_DATA_get_data(group->extra_data,
-                                  nistp224_pre_comp_dup,
-                                  nistp224_pre_comp_free,
-                                  nistp224_pre_comp_clear_free);
+        pre = group->pre_comp.nistp224;
         if (pre)
             /* we have precomputation, try to use it */
             g_pre_comp = (const felem(*)[16][3])pre->g_pre_comp;
@@ -1457,8 +1429,8 @@ int ec_GFp_nistp224_points_mul(const EC_GROUP *group, EC_POINT *r,
              */
             mixed = 1;
         }
-        secrets = OPENSSL_malloc(sizeof(*secrets) * num_points);
-        pre_comp = OPENSSL_malloc(sizeof(*pre_comp) * num_points);
+        secrets = OPENSSL_zalloc(sizeof(*secrets) * num_points);
+        pre_comp = OPENSSL_zalloc(sizeof(*pre_comp) * num_points);
         if (mixed)
             tmp_felems =
                 OPENSSL_malloc(sizeof(felem) * (num_points * 17 + 1));
@@ -1472,8 +1444,6 @@ int ec_GFp_nistp224_points_mul(const EC_GROUP *group, EC_POINT *r,
          * we treat NULL scalars as 0, and NULL points as points at infinity,
          * i.e., they contribute nothing to the linear combination
          */
-        memset(secrets, 0, sizeof(*secrets) * num_points);
-        memset(pre_comp, 0, sizeof(*pre_comp) * num_points);
         for (i = 0; i < num_points; ++i) {
             if (i == num)
                 /* the generator */
@@ -1590,9 +1560,7 @@ int ec_GFp_nistp224_precompute_mult(EC_GROUP *group, BN_CTX *ctx)
     felem tmp_felems[32];
 
     /* throw away old precomputation */
-    EC_EX_DATA_free_data(&group->extra_data, nistp224_pre_comp_dup,
-                         nistp224_pre_comp_free,
-                         nistp224_pre_comp_clear_free);
+    EC_pre_comp_free(group);
     if (ctx == NULL)
         if ((ctx = new_ctx = BN_CTX_new()) == NULL)
             return 0;
@@ -1616,8 +1584,7 @@ int ec_GFp_nistp224_precompute_mult(EC_GROUP *group, BN_CTX *ctx)
      */
     if (0 == EC_POINT_cmp(group, generator, group->generator, ctx)) {
         memcpy(pre->g_pre_comp, gmul, sizeof(pre->g_pre_comp));
-        ret = 1;
-        goto err;
+        goto done;
     }
     if ((!BN_to_felem(pre->g_pre_comp[0][1][0], group->generator->X)) ||
         (!BN_to_felem(pre->g_pre_comp[0][1][1], group->generator->Y)) ||
@@ -1695,31 +1662,21 @@ int ec_GFp_nistp224_precompute_mult(EC_GROUP *group, BN_CTX *ctx)
     }
     make_points_affine(31, &(pre->g_pre_comp[0][1]), tmp_felems);
 
-    if (!EC_EX_DATA_set_data(&group->extra_data, pre, nistp224_pre_comp_dup,
-                             nistp224_pre_comp_free,
-                             nistp224_pre_comp_clear_free))
-        goto err;
-    ret = 1;
+ done:
+    SETPRECOMP(group, nistp224, pre);
     pre = NULL;
+    ret = 1;
  err:
     BN_CTX_end(ctx);
     EC_POINT_free(generator);
     BN_CTX_free(new_ctx);
-    nistp224_pre_comp_free(pre);
+    EC_nistp224_pre_comp_free(pre);
     return ret;
 }
 
 int ec_GFp_nistp224_have_precompute_mult(const EC_GROUP *group)
 {
-    if (EC_EX_DATA_get_data(group->extra_data, nistp224_pre_comp_dup,
-                            nistp224_pre_comp_free,
-                            nistp224_pre_comp_clear_free)
-        != NULL)
-        return 1;
-    else
-        return 0;
+    return HAVEPRECOMP(group, nistp224);
 }
 
-#else
-static void *dummy = &dummy;
 #endif

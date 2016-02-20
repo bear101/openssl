@@ -1,4 +1,3 @@
-/* crypto/bn/bntest.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -83,9 +82,9 @@
 
 #include "../crypto/bn/bn_lcl.h"
 
-const int num0 = 100;           /* number of tests */
-const int num1 = 50;            /* additional tests for some functions */
-const int num2 = 5;             /* number of tests for slow functions */
+static const int num0 = 100;           /* number of tests */
+static const int num1 = 50;            /* additional tests for some functions */
+static const int num2 = 5;             /* number of tests for slow functions */
 
 int test_add(BIO *bp);
 int test_sub(BIO *bp);
@@ -117,7 +116,6 @@ int test_gf2m_mod_solve_quad(BIO *bp, BN_CTX *ctx);
 int test_kron(BIO *bp, BN_CTX *ctx);
 int test_sqrt(BIO *bp, BN_CTX *ctx);
 int test_small_prime(BIO *bp, BN_CTX *ctx);
-int test_probable_prime_coprime(BIO *bp, BN_CTX *ctx);
 int rand_neg(void);
 static int results = 0;
 
@@ -168,13 +166,19 @@ int main(int argc, char *argv[])
     if (out == NULL)
         EXIT(1);
     if (outfile == NULL) {
-        BIO_set_fp(out, stdout, BIO_NOCLOSE);
+        BIO_set_fp(out, stdout, BIO_NOCLOSE | BIO_FP_TEXT);
     } else {
         if (!BIO_write_filename(out, outfile)) {
             perror(outfile);
             EXIT(1);
         }
     }
+#ifdef OPENSSL_SYS_VMS
+    {
+        BIO *tmpbio = BIO_new(BIO_f_linebuffer());
+        out = BIO_push(tmpbio, out);
+    }
+#endif
 
     if (!results)
         BIO_puts(out, "obase=16\nibase=16\n");
@@ -286,15 +290,6 @@ int main(int argc, char *argv[])
         goto err;
     (void)BIO_flush(out);
 
-#ifdef OPENSSL_SYS_WIN32
-    message(out, "Probable prime generation with coprimes disabled");
-#else
-    message(out, "Probable prime generation with coprimes");
-    if (!test_probable_prime_coprime(out, ctx))
-        goto err;
-#endif
-    (void)BIO_flush(out);
-
 #ifndef OPENSSL_NO_EC2M
     message(out, "BN_GF2m_add");
     if (!test_gf2m_add(out))
@@ -350,7 +345,7 @@ int main(int argc, char *argv[])
                                  * notices the failure, see test_bn in
                                  * test/Makefile.ssl */
     (void)BIO_flush(out);
-    ERR_load_crypto_strings();
+
     ERR_print_errors_fp(stderr);
     EXIT(1);
 }
@@ -451,6 +446,14 @@ int test_div(BIO *bp, BN_CTX *ctx)
     d = BN_new();
     e = BN_new();
 
+    BN_one(a);
+    BN_zero(b);
+
+    if (BN_div(d, c, a, b, ctx)) {
+        fprintf(stderr, "Division by zero succeeded!\n");
+        return 0;
+    }
+
     for (i = 0; i < num0 + num1; i++) {
         if (i < num1) {
             BN_bntest_rand(a, 400, 0, 0);
@@ -499,18 +502,25 @@ int test_div(BIO *bp, BN_CTX *ctx)
 
 static void print_word(BIO *bp, BN_ULONG w)
 {
-#ifdef SIXTY_FOUR_BIT
-    if (sizeof(w) > sizeof(unsigned long)) {
-        unsigned long h = (unsigned long)(w >> 32), l = (unsigned long)(w);
+    int i = sizeof(w) * 8;
+    char *fmt = NULL;
+    unsigned char byte;
 
-        if (h)
-            BIO_printf(bp, "%lX%08lX", h, l);
+    do {
+        i -= 8;
+        byte = (unsigned char)(w >> i);
+        if (fmt == NULL)
+            fmt = byte ? "%X" : NULL;
         else
-            BIO_printf(bp, "%lX", l);
-        return;
-    }
-#endif
-    BIO_printf(bp, BN_HEX_FMT1, w);
+            fmt = "%02X";
+
+        if (fmt != NULL)
+            BIO_printf(bp, fmt, byte);
+    } while (i);
+
+    /* If we haven't printed anything, at least print a zero! */
+    if (fmt == NULL)
+        BIO_printf(bp, "0");
 }
 
 int test_div_word(BIO *bp)
@@ -526,9 +536,9 @@ int test_div_word(BIO *bp)
         do {
             BN_bntest_rand(a, 512, -1, 0);
             BN_bntest_rand(b, BN_BITS2, -1, 0);
-            s = b->d[0];
-        } while (!s);
+        } while (BN_is_zero(b));
 
+        s = b->d[0];
         BN_copy(b, a);
         r = BN_div_word(b, s);
 
@@ -787,6 +797,18 @@ int test_mont(BIO *bp, BN_CTX *ctx)
     if (mont == NULL)
         return 0;
 
+    BN_zero(n);
+    if (BN_MONT_CTX_set(mont, n, ctx)) {
+        fprintf(stderr, "BN_MONT_CTX_set succeeded for zero modulus!\n");
+        return 0;
+    }
+
+    BN_set_word(n, 16);
+    if (BN_MONT_CTX_set(mont, n, ctx)) {
+        fprintf(stderr, "BN_MONT_CTX_set succeeded for even modulus!\n");
+        return 0;
+    }
+
     BN_bntest_rand(a, 100, 0, 0);
     BN_bntest_rand(b, 100, 0, 0);
     for (i = 0; i < num2; i++) {
@@ -888,6 +910,14 @@ int test_mod_mul(BIO *bp, BN_CTX *ctx)
     d = BN_new();
     e = BN_new();
 
+    BN_one(a);
+    BN_one(b);
+    BN_zero(c);
+    if (BN_mod_mul(e, a, b, c, ctx)) {
+        fprintf(stderr, "BN_mod_mul with zero modulus succeeded!\n");
+        return 0;
+    }
+
     for (j = 0; j < 3; j++) {
         BN_bntest_rand(c, 1024, 0, 0);
         for (i = 0; i < num0; i++) {
@@ -953,6 +983,14 @@ int test_mod_exp(BIO *bp, BN_CTX *ctx)
     d = BN_new();
     e = BN_new();
 
+    BN_one(a);
+    BN_one(b);
+    BN_zero(c);
+    if (BN_mod_exp(d, a, b, c, ctx)) {
+        fprintf(stderr, "BN_mod_exp with zero modulus succeeded!\n");
+        return 0;
+    }
+
     BN_bntest_rand(c, 30, 0, 1); /* must be odd for montgomery */
     for (i = 0; i < num2; i++) {
         BN_bntest_rand(a, 20 + i * 5, 0, 0);
@@ -981,6 +1019,24 @@ int test_mod_exp(BIO *bp, BN_CTX *ctx)
             return 0;
         }
     }
+
+    /* Regression test for carry propagation bug in sqr8x_reduction */
+    BN_hex2bn(&a, "050505050505");
+    BN_hex2bn(&b, "02");
+    BN_hex2bn(&c,
+        "4141414141414141414141274141414141414141414141414141414141414141"
+        "4141414141414141414141414141414141414141414141414141414141414141"
+        "4141414141414141414141800000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000001");
+    BN_mod_exp(d, a, b, c, ctx);
+    BN_mul(e, a, a, ctx);
+    if (BN_cmp(d, e)) {
+        fprintf(stderr, "BN_mod_exp and BN_mul produce different results!\n");
+        return 0;
+    }
+
     BN_free(a);
     BN_free(b);
     BN_free(c);
@@ -999,6 +1055,22 @@ int test_mod_exp_mont_consttime(BIO *bp, BN_CTX *ctx)
     c = BN_new();
     d = BN_new();
     e = BN_new();
+
+    BN_one(a);
+    BN_one(b);
+    BN_zero(c);
+    if (BN_mod_exp_mont_consttime(d, a, b, c, ctx, NULL)) {
+        fprintf(stderr, "BN_mod_exp_mont_consttime with zero modulus "
+                "succeeded\n");
+        return 0;
+    }
+
+    BN_set_word(c, 16);
+    if (BN_mod_exp_mont_consttime(d, a, b, c, ctx, NULL)) {
+        fprintf(stderr, "BN_mod_exp_mont_consttime with even modulus "
+                "succeeded\n");
+        return 0;
+    }
 
     BN_bntest_rand(c, 30, 0, 1); /* must be odd for montgomery */
     for (i = 0; i < num2; i++) {
@@ -1043,7 +1115,6 @@ int test_mod_exp_mont_consttime(BIO *bp, BN_CTX *ctx)
 int test_mod_exp_mont5(BIO *bp, BN_CTX *ctx)
 {
     BIGNUM *a, *p, *m, *d, *e;
-
     BN_MONT_CTX *mont;
 
     a = BN_new();
@@ -1051,7 +1122,6 @@ int test_mod_exp_mont5(BIO *bp, BN_CTX *ctx)
     m = BN_new();
     d = BN_new();
     e = BN_new();
-
     mont = BN_MONT_CTX_new();
 
     BN_bntest_rand(m, 1024, 0, 1); /* must be odd for montgomery */
@@ -1100,6 +1170,7 @@ int test_mod_exp_mont5(BIO *bp, BN_CTX *ctx)
         fprintf(stderr, "Modular exponentiation test failed!\n");
         return 0;
     }
+    BN_MONT_CTX_free(mont);
     BN_free(a);
     BN_free(p);
     BN_free(m);
@@ -1784,37 +1855,6 @@ int test_small_prime(BIO *bp, BN_CTX *ctx)
     return ret;
 }
 
-#ifndef OPENSSL_SYS_WIN32
-int test_probable_prime_coprime(BIO *bp, BN_CTX *ctx)
-{
-    int i, j, ret = 0;
-    BIGNUM *r;
-    BN_ULONG primes[5] = { 2, 3, 5, 7, 11 };
-
-    r = BN_new();
-
-    for (i = 0; i < 1000; i++) {
-        if (!bn_probable_prime_dh_coprime(r, 1024, ctx))
-            goto err;
-
-        for (j = 0; j < 5; j++) {
-            if (BN_mod_word(r, primes[j]) == 0) {
-                BIO_printf(bp, "Number generated is not coprime to "
-			   BN_DEC_FMT1 ":\n", primes[j]);
-                BN_print_fp(stdout, r);
-                BIO_printf(bp, "\n");
-                goto err;
-            }
-        }
-    }
-
-    ret = 1;
-
- err:
-    BN_clear_free(r);
-    return ret;
-}
-#endif
 int test_lshift(BIO *bp, BN_CTX *ctx, BIGNUM *a_)
 {
     BIGNUM *a, *b, *c, *d;

@@ -1,4 +1,3 @@
-/* crypto/asn1/evp_asn1.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +56,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 
@@ -103,7 +102,7 @@ typedef struct {
 ASN1_SEQUENCE(asn1_int_oct) = {
         ASN1_SIMPLE(asn1_int_oct, num, LONG),
         ASN1_SIMPLE(asn1_int_oct, oct, ASN1_OCTET_STRING)
-} ASN1_SEQUENCE_END(asn1_int_oct)
+} static_ASN1_SEQUENCE_END(asn1_int_oct)
 
 DECLARE_ASN1_ITEM(asn1_int_oct)
 

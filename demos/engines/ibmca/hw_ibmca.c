@@ -1,4 +1,3 @@
-/* crypto/engine/hw_ibmca.c */
 /*
  * Written by Geoff Thorpe (geoff@geoffthorpe.net) for the OpenSSL project
  * 2000.
@@ -241,14 +240,14 @@ static int bind_helper(ENGINE *e)
 
 #  ifndef OPENSSL_NO_RSA
     /*
-     * We know that the "PKCS1_SSLeay()" functions hook properly to the
+     * We know that the "PKCS1_OpenSSL()" functions hook properly to the
      * ibmca-specific mod_exp and mod_exp_crt so we use those functions. NB:
      * We don't use ENGINE_openssl() or anything "more generic" because
      * something like the RSAref code may not hook properly, and if you own
      * one of these cards then you have the right to do RSA operations on it
      * anyway!
      */
-    meth1 = RSA_PKCS1_SSLeay();
+    meth1 = RSA_PKCS1_OpenSSL();
     ibmca_rsa.rsa_pub_enc = meth1->rsa_pub_enc;
     ibmca_rsa.rsa_pub_dec = meth1->rsa_pub_dec;
     ibmca_rsa.rsa_priv_enc = meth1->rsa_priv_enc;
@@ -388,11 +387,11 @@ static int ibmca_init(ENGINE *e)
         goto err;
     }
 
-    if (!(p1 = DSO_bind_func(ibmca_dso, IBMCA_F1)) ||
-        !(p2 = DSO_bind_func(ibmca_dso, IBMCA_F2)) ||
-        !(p3 = DSO_bind_func(ibmca_dso, IBMCA_F3)) ||
-        !(p4 = DSO_bind_func(ibmca_dso, IBMCA_F4)) ||
-        !(p5 = DSO_bind_func(ibmca_dso, IBMCA_F5))) {
+    if ((p1 = DSO_bind_func(ibmca_dso, IBMCA_F1)) == NULL
+        || (p2 = DSO_bind_func(ibmca_dso, IBMCA_F2)) == NULL
+        || (p3 = DSO_bind_func(ibmca_dso, IBMCA_F3)) == NULL
+        || (p4 = DSO_bind_func(ibmca_dso, IBMCA_F4)) == NULL
+        || (p5 = DSO_bind_func(ibmca_dso, IBMCA_F5)) == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
         goto err;
     }

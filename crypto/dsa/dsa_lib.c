@@ -1,4 +1,3 @@
-/* crypto/dsa/dsa_lib.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -59,7 +58,7 @@
 /* Original version from Steven Schoch <schoch@sheba.arc.nasa.gov> */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/dsa.h>
 #include <openssl/asn1.h>
@@ -69,8 +68,6 @@
 #ifndef OPENSSL_NO_DH
 # include <openssl/dh.h>
 #endif
-
-const char DSA_version[] = "DSA" OPENSSL_VERSION_PTEXT;
 
 static const DSA_METHOD *default_DSA_method = NULL;
 
@@ -117,7 +114,7 @@ DSA *DSA_new_method(ENGINE *engine)
 {
     DSA *ret;
 
-    ret = OPENSSL_malloc(sizeof(*ret));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         DSAerr(DSA_F_DSA_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return (NULL);
@@ -144,19 +141,6 @@ DSA *DSA_new_method(ENGINE *engine)
     }
 #endif
 
-    ret->pad = 0;
-    ret->version = 0;
-    ret->p = NULL;
-    ret->q = NULL;
-    ret->g = NULL;
-
-    ret->pub_key = NULL;
-    ret->priv_key = NULL;
-
-    ret->kinv = NULL;
-    ret->r = NULL;
-    ret->method_mont_p = NULL;
-
     ret->references = 1;
     ret->flags = ret->meth->flags & ~DSA_FLAG_NON_FIPS_ALLOW;
     CRYPTO_new_ex_data(CRYPTO_EX_INDEX_DSA, ret, &ret->ex_data);
@@ -181,17 +165,10 @@ void DSA_free(DSA *r)
         return;
 
     i = CRYPTO_add(&r->references, -1, CRYPTO_LOCK_DSA);
-#ifdef REF_PRINT
-    REF_PRINT("DSA", r);
-#endif
+    REF_PRINT_COUNT("DSA", r);
     if (i > 0)
         return;
-#ifdef REF_CHECK
-    if (i < 0) {
-        fprintf(stderr, "DSA_free, bad reference count\n");
-        abort();
-    }
-#endif
+    REF_ASSERT_ISNT(i < 0);
 
     if (r->meth->finish)
         r->meth->finish(r);
@@ -215,15 +192,9 @@ void DSA_free(DSA *r)
 int DSA_up_ref(DSA *r)
 {
     int i = CRYPTO_add(&r->references, 1, CRYPTO_LOCK_DSA);
-#ifdef REF_PRINT
-    REF_PRINT("DSA", r);
-#endif
-#ifdef REF_CHECK
-    if (i < 2) {
-        fprintf(stderr, "DSA_up_ref, bad reference count\n");
-        abort();
-    }
-#endif
+
+    REF_PRINT_COUNT("DSA", r);
+    REF_ASSERT_ISNT(i < 2);
     return ((i > 1) ? 1 : 0);
 }
 
@@ -249,13 +220,6 @@ int DSA_size(const DSA *r)
     return (ret);
 }
 
-int DSA_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
-                         CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func)
-{
-    return CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_DSA, argl, argp,
-                                   new_func, dup_func, free_func);
-}
-
 int DSA_set_ex_data(DSA *d, int idx, void *arg)
 {
     return (CRYPTO_set_ex_data(&d->ex_data, idx, arg));
@@ -268,7 +232,9 @@ void *DSA_get_ex_data(DSA *d, int idx)
 
 int DSA_security_bits(const DSA *d)
 {
-    return BN_security_bits(BN_num_bits(d->p), BN_num_bits(d->q));
+    if (d->p && d->q)
+        return BN_security_bits(BN_num_bits(d->p), BN_num_bits(d->q));
+    return -1;
 }
 
 #ifndef OPENSSL_NO_DH

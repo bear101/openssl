@@ -1,4 +1,3 @@
-/* asn_pack.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 
 /* ASN1 packing and unpacking functions */
@@ -67,8 +66,8 @@ ASN1_STRING *ASN1_item_pack(void *obj, const ASN1_ITEM *it, ASN1_STRING **oct)
 {
     ASN1_STRING *octmp;
 
-    if (!oct || !*oct) {
-        if (!(octmp = ASN1_STRING_new())) {
+     if (oct == NULL|| *oct== NULL) {
+        if ((octmp = ASN1_STRING_new()) == NULL) {
             ASN1err(ASN1_F_ASN1_ITEM_PACK, ERR_R_MALLOC_FAILURE);
             return NULL;
         }
@@ -80,7 +79,7 @@ ASN1_STRING *ASN1_item_pack(void *obj, const ASN1_ITEM *it, ASN1_STRING **oct)
     OPENSSL_free(octmp->data);
     octmp->data = NULL;
 
-    if (!(octmp->length = ASN1_item_i2d(obj, &octmp->data, it))) {
+    if ((octmp->length = ASN1_item_i2d(obj, &octmp->data, it)) == 0) {
         ASN1err(ASN1_F_ASN1_ITEM_PACK, ASN1_R_ENCODE_ERROR);
         return NULL;
     }
@@ -99,7 +98,7 @@ void *ASN1_item_unpack(ASN1_STRING *oct, const ASN1_ITEM *it)
     void *ret;
 
     p = oct->data;
-    if (!(ret = ASN1_item_d2i(NULL, &p, oct->length, it)))
+    if ((ret = ASN1_item_d2i(NULL, &p, oct->length, it)) == NULL)
         ASN1err(ASN1_F_ASN1_ITEM_UNPACK, ASN1_R_DECODE_ERROR);
     return ret;
 }

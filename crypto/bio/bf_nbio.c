@@ -1,4 +1,3 @@
-/* crypto/bio/bf_nbio.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,7 +57,7 @@
 
 #include <stdio.h>
 #include <errno.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/rand.h>
 #include <openssl/bio.h>
 
@@ -102,13 +101,12 @@ static int nbiof_new(BIO *bi)
 {
     NBIO_TEST *nt;
 
-    if (!(nt = OPENSSL_malloc(sizeof(*nt))))
+    if ((nt = OPENSSL_zalloc(sizeof(*nt))) == NULL)
         return (0);
     nt->lrn = -1;
     nt->lwn = -1;
     bi->ptr = (char *)nt;
     bi->init = 1;
-    bi->flags = 0;
     return (1);
 }
 

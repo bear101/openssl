@@ -1,3 +1,4 @@
+
 /* crypto/ec/ec.h */
 /*
  * Originally written by Bodo Moeller for the OpenSSL project.
@@ -84,7 +85,7 @@
 
 # include <openssl/asn1.h>
 # include <openssl/symhacks.h>
-# ifdef OPENSSL_USE_DEPRECATED
+# if OPENSSL_API_COMPAT < 0x10100000L
 #  include <openssl/bn.h>
 # endif
 
@@ -106,7 +107,7 @@ typedef enum {
         /** the point is encoded as z||x, where the octet z specifies
          *  which solution of the quadratic equation y is  */
     POINT_CONVERSION_COMPRESSED = 2,
-        /** the point is encoded as z||x||y, where z is the octet 0x02  */
+        /** the point is encoded as z||x||y, where z is the octet 0x04  */
     POINT_CONVERSION_UNCOMPRESSED = 4,
         /** the point is encoded as z||x||y, where the octet z specifies
          *  which solution of the quadratic equation y is  */
@@ -256,6 +257,20 @@ BN_MONT_CTX *EC_GROUP_get_mont_data(const EC_GROUP *group);
  */
 int EC_GROUP_get_order(const EC_GROUP *group, BIGNUM *order, BN_CTX *ctx);
 
+/** Gets the order of an EC_GROUP
+ *  \param  group  EC_GROUP object
+ *  \return the group order
+ */
+
+const BIGNUM *EC_GROUP_get0_order(const EC_GROUP *group);
+
+/** Gets the number of bits of ther order of an EC_GROUP
+ *  \param  group  EC_GROUP object
+ *  \return number of bits of group order.
+ */
+
+int EC_GROUP_order_bits(const EC_GROUP *group);
+
 /** Gets the cofactor of a EC_GROUP
  *  \param  group     EC_GROUP object
  *  \param  cofactor  BIGNUM to which the cofactor is copied
@@ -264,6 +279,13 @@ int EC_GROUP_get_order(const EC_GROUP *group, BIGNUM *order, BN_CTX *ctx);
  */
 int EC_GROUP_get_cofactor(const EC_GROUP *group, BIGNUM *cofactor,
                           BN_CTX *ctx);
+
+/** Gets the cofactor of an EC_GROUP
+ *  \param  group  EC_GROUP object
+ *  \return the group cofactor
+ */
+
+const BIGNUM *EC_GROUP_get0_cofactor(const EC_GROUP *group);
 
 /** Sets the name of a EC_GROUP object
  *  \param  group  EC_GROUP object
@@ -588,6 +610,20 @@ size_t EC_POINT_point2oct(const EC_GROUP *group, const EC_POINT *p,
 int EC_POINT_oct2point(const EC_GROUP *group, EC_POINT *p,
                        const unsigned char *buf, size_t len, BN_CTX *ctx);
 
+/** Encodes an EC_POINT object to an allocated octet string
+ *  \param  group  underlying EC_GROUP object
+ *  \param  point  EC_POINT object
+ *  \param  form   point conversion form
+ *  \param  pbuf   returns pointer to allocated buffer
+ *  \param  len    length of the memory buffer
+ *  \param  ctx    BN_CTX object (optional)
+ *  \return the length of the encoded octet string or 0 if an error occurred
+ */
+
+size_t EC_POINT_point2buf(const EC_GROUP *group, const EC_POINT *point,
+                          point_conversion_form_t form,
+                          unsigned char **pbuf, BN_CTX *ctx);
+
 /* other interfaces to point2oct/oct2point: */
 BIGNUM *EC_POINT_point2bn(const EC_GROUP *, const EC_POINT *,
                           point_conversion_form_t form, BIGNUM *, BN_CTX *);
@@ -739,8 +775,6 @@ int ECPKParameters_print_fp(FILE *fp, const EC_GROUP *x, int off);
 /*                      EC_KEY functions                            */
 /********************************************************************/
 
-typedef struct ec_key_st EC_KEY;
-
 /* some values for the encoding_flag */
 # define EC_PKEY_NO_PARAMETERS   0x001
 # define EC_PKEY_NO_PUBKEY       0x002
@@ -748,6 +782,7 @@ typedef struct ec_key_st EC_KEY;
 /* some values for the flags field */
 # define EC_FLAG_NON_FIPS_ALLOW  0x1
 # define EC_FLAG_FIPS_CHECKED    0x2
+# define EC_FLAG_COFACTOR_ECDH   0x1000
 
 /** Creates a new EC_KEY object.
  *  \return EC_KEY object or NULL if an error occurred.
@@ -777,13 +812,13 @@ void EC_KEY_free(EC_KEY *key);
  *  \param  src  src EC_KEY object
  *  \return dst or NULL if an error occurred.
  */
-EC_KEY *EC_KEY_copy(EC_KEY *dst, const EC_KEY *src);
+EC_KEY *EC_KEY_copy(EC_KEY *dst, EC_KEY *src);
 
 /** Creates a new EC_KEY object and copies the content from src to it.
  *  \param  src  the source EC_KEY object
  *  \return newly created EC_KEY object or NULL if an error occurred.
  */
-EC_KEY *EC_KEY_dup(const EC_KEY *src);
+EC_KEY *EC_KEY_dup(EC_KEY *src);
 
 /** Increases the internal reference count of a EC_KEY object.
  *  \param  key  EC_KEY object
@@ -837,23 +872,12 @@ unsigned EC_KEY_get_enc_flags(const EC_KEY *key);
 void EC_KEY_set_enc_flags(EC_KEY *eckey, unsigned int flags);
 point_conversion_form_t EC_KEY_get_conv_form(const EC_KEY *key);
 void EC_KEY_set_conv_form(EC_KEY *eckey, point_conversion_form_t cform);
-/* functions to set/get method specific data  */
-void *EC_KEY_get_key_method_data(EC_KEY *key,
-                                 void *(*dup_func) (void *),
-                                 void (*free_func) (void *),
-                                 void (*clear_free_func) (void *));
-/** Sets the key method data of an EC_KEY object, if none has yet been set.
- *  \param  key              EC_KEY object
- *  \param  data             opaque data to install.
- *  \param  dup_func         a function that duplicates |data|.
- *  \param  free_func        a function that frees |data|.
- *  \param  clear_free_func  a function that wipes and frees |data|.
- *  \return the previously set data pointer, or NULL if |data| was inserted.
- */
-void *EC_KEY_insert_key_method_data(EC_KEY *key, void *data,
-                                    void *(*dup_func) (void *),
-                                    void (*free_func) (void *),
-                                    void (*clear_free_func) (void *));
+
+#define EC_KEY_get_ex_new_index(l, p, newf, dupf, freef) \
+    CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_EC_KEY, l, p, newf, dupf, freef)
+int EC_KEY_set_ex_data(EC_KEY *key, int idx, void *arg);
+void *EC_KEY_get_ex_data(const EC_KEY *key, int idx);
+
 /* wrapper functions for the underlying EC_GROUP object */
 void EC_KEY_set_asn1_flag(EC_KEY *eckey, int asn1_flag);
 
@@ -886,6 +910,56 @@ int EC_KEY_check_key(const EC_KEY *key);
  */
 int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
                                              BIGNUM *y);
+
+/** Encodes an EC_KEY public key to an allocated octet string
+ *  \param  key    key to encode
+ *  \param  form   point conversion form
+ *  \param  pbuf   returns pointer to allocated buffer
+ *  \param  len    length of the memory buffer
+ *  \param  ctx    BN_CTX object (optional)
+ *  \return the length of the encoded octet string or 0 if an error occurred
+ */
+
+size_t EC_KEY_key2buf(const EC_KEY *key, point_conversion_form_t form,
+                      unsigned char **pbuf, BN_CTX *ctx);
+
+/** Decodes a EC_KEY public key from a octet string
+ *  \param  key    key to decode
+ *  \param  buf    memory buffer with the encoded ec point
+ *  \param  len    length of the encoded ec point
+ *  \param  ctx    BN_CTX object (optional)
+ *  \return 1 on success and 0 if an error occurred
+ */
+
+int EC_KEY_oct2key(EC_KEY *key, const unsigned char *buf, size_t len,
+                   BN_CTX *ctx);
+
+/** Decodes an EC_KEY private key from an octet string
+ *  \param  key    key to decode
+ *  \param  buf    memory buffer with the encoded private key
+ *  \param  len    length of the encoded key
+ *  \return 1 on success and 0 if an error occurred
+ */
+
+int EC_KEY_oct2priv(EC_KEY *key, unsigned char *buf, size_t len);
+
+/** Encodes a EC_KEY private key to an octet string
+ *  \param  key    key to encode
+ *  \param  buf    memory buffer for the result. If NULL the function returns
+ *                 required buffer size.
+ *  \param  len    length of the memory buffer
+ *  \return the length of the encoded octet string or 0 if an error occurred
+ */
+
+size_t EC_KEY_priv2oct(const EC_KEY *key, unsigned char *buf, size_t len);
+
+/** Encodes an EC_KEY private key to an allocated octet string
+ *  \param  key    key to encode
+ *  \param  pbuf   returns pointer to allocated buffer
+ *  \return the length of the encoded octet string or 0 if an error occurred
+ */
+
+size_t EC_KEY_priv2buf(const EC_KEY *eckey, unsigned char **pbuf);
 
 /********************************************************************/
 /*        de- and encoding functions for SEC1 ECPrivateKey          */
@@ -982,6 +1056,255 @@ int ECParameters_print_fp(FILE *fp, const EC_KEY *key);
 int EC_KEY_print_fp(FILE *fp, const EC_KEY *key, int off);
 
 # endif
+
+const EC_KEY_METHOD *EC_KEY_OpenSSL(void);
+const EC_KEY_METHOD *EC_KEY_get_default_method(void);
+void EC_KEY_set_default_method(const EC_KEY_METHOD *meth);
+const EC_KEY_METHOD *EC_KEY_get_method(const EC_KEY *key);
+int EC_KEY_set_method(EC_KEY *key, const EC_KEY_METHOD *meth);
+EC_KEY *EC_KEY_new_method(ENGINE *engine);
+
+int ECDH_KDF_X9_62(unsigned char *out, size_t outlen,
+                   const unsigned char *Z, size_t Zlen,
+                   const unsigned char *sinfo, size_t sinfolen,
+                   const EVP_MD *md);
+
+int ECDH_compute_key(void *out, size_t outlen, const EC_POINT *pub_key,
+                     const EC_KEY *ecdh,
+                     void *(*KDF) (const void *in, size_t inlen,
+                                   void *out, size_t *outlen));
+
+typedef struct ECDSA_SIG_st ECDSA_SIG;
+
+/** Allocates and initialize a ECDSA_SIG structure
+ *  \return pointer to a ECDSA_SIG structure or NULL if an error occurred
+ */
+ECDSA_SIG *ECDSA_SIG_new(void);
+
+/** frees a ECDSA_SIG structure
+ *  \param  sig  pointer to the ECDSA_SIG structure
+ */
+void ECDSA_SIG_free(ECDSA_SIG *sig);
+
+/** DER encode content of ECDSA_SIG object (note: this function modifies *pp
+ *  (*pp += length of the DER encoded signature)).
+ *  \param  sig  pointer to the ECDSA_SIG object
+ *  \param  pp   pointer to a unsigned char pointer for the output or NULL
+ *  \return the length of the DER encoded ECDSA_SIG object or 0
+ */
+int i2d_ECDSA_SIG(const ECDSA_SIG *sig, unsigned char **pp);
+
+/** Decodes a DER encoded ECDSA signature (note: this function changes *pp
+ *  (*pp += len)).
+ *  \param  sig  pointer to ECDSA_SIG pointer (may be NULL)
+ *  \param  pp   memory buffer with the DER encoded signature
+ *  \param  len  length of the buffer
+ *  \return pointer to the decoded ECDSA_SIG structure (or NULL)
+ */
+ECDSA_SIG *d2i_ECDSA_SIG(ECDSA_SIG **sig, const unsigned char **pp, long len);
+
+/** Accessor for r and s fields of ECDSA_SIG
+ *  \param  sig  pointer to ECDSA_SIG pointer
+ *  \param  pr   pointer to BIGNUM pointer for r (may be NULL)
+ *  \param  ps   pointer to BIGNUM pointer for s (may be NULL)
+ */
+void ECDSA_SIG_get0(BIGNUM **pr, BIGNUM **ps, ECDSA_SIG *sig);
+
+/** Computes the ECDSA signature of the given hash value using
+ *  the supplied private key and returns the created signature.
+ *  \param  dgst      pointer to the hash value
+ *  \param  dgst_len  length of the hash value
+ *  \param  eckey     EC_KEY object containing a private EC key
+ *  \return pointer to a ECDSA_SIG structure or NULL if an error occurred
+ */
+ECDSA_SIG *ECDSA_do_sign(const unsigned char *dgst, int dgst_len,
+                         EC_KEY *eckey);
+
+/** Computes ECDSA signature of a given hash value using the supplied
+ *  private key (note: sig must point to ECDSA_size(eckey) bytes of memory).
+ *  \param  dgst     pointer to the hash value to sign
+ *  \param  dgstlen  length of the hash value
+ *  \param  kinv     BIGNUM with a pre-computed inverse k (optional)
+ *  \param  rp       BIGNUM with a pre-computed rp value (optioanl),
+ *                   see ECDSA_sign_setup
+ *  \param  eckey    EC_KEY object containing a private EC key
+ *  \return pointer to a ECDSA_SIG structure or NULL if an error occurred
+ */
+ECDSA_SIG *ECDSA_do_sign_ex(const unsigned char *dgst, int dgstlen,
+                            const BIGNUM *kinv, const BIGNUM *rp,
+                            EC_KEY *eckey);
+
+/** Verifies that the supplied signature is a valid ECDSA
+ *  signature of the supplied hash value using the supplied public key.
+ *  \param  dgst      pointer to the hash value
+ *  \param  dgst_len  length of the hash value
+ *  \param  sig       ECDSA_SIG structure
+ *  \param  eckey     EC_KEY object containing a public EC key
+ *  \return 1 if the signature is valid, 0 if the signature is invalid
+ *          and -1 on error
+ */
+int ECDSA_do_verify(const unsigned char *dgst, int dgst_len,
+                    const ECDSA_SIG *sig, EC_KEY *eckey);
+
+/** Precompute parts of the signing operation
+ *  \param  eckey  EC_KEY object containing a private EC key
+ *  \param  ctx    BN_CTX object (optional)
+ *  \param  kinv   BIGNUM pointer for the inverse of k
+ *  \param  rp     BIGNUM pointer for x coordinate of k * generator
+ *  \return 1 on success and 0 otherwise
+ */
+int ECDSA_sign_setup(EC_KEY *eckey, BN_CTX *ctx, BIGNUM **kinv, BIGNUM **rp);
+
+/** Computes ECDSA signature of a given hash value using the supplied
+ *  private key (note: sig must point to ECDSA_size(eckey) bytes of memory).
+ *  \param  type     this parameter is ignored
+ *  \param  dgst     pointer to the hash value to sign
+ *  \param  dgstlen  length of the hash value
+ *  \param  sig      memory for the DER encoded created signature
+ *  \param  siglen   pointer to the length of the returned signature
+ *  \param  eckey    EC_KEY object containing a private EC key
+ *  \return 1 on success and 0 otherwise
+ */
+int ECDSA_sign(int type, const unsigned char *dgst, int dgstlen,
+               unsigned char *sig, unsigned int *siglen, EC_KEY *eckey);
+
+/** Computes ECDSA signature of a given hash value using the supplied
+ *  private key (note: sig must point to ECDSA_size(eckey) bytes of memory).
+ *  \param  type     this parameter is ignored
+ *  \param  dgst     pointer to the hash value to sign
+ *  \param  dgstlen  length of the hash value
+ *  \param  sig      buffer to hold the DER encoded signature
+ *  \param  siglen   pointer to the length of the returned signature
+ *  \param  kinv     BIGNUM with a pre-computed inverse k (optional)
+ *  \param  rp       BIGNUM with a pre-computed rp value (optioanl),
+ *                   see ECDSA_sign_setup
+ *  \param  eckey    EC_KEY object containing a private EC key
+ *  \return 1 on success and 0 otherwise
+ */
+int ECDSA_sign_ex(int type, const unsigned char *dgst, int dgstlen,
+                  unsigned char *sig, unsigned int *siglen,
+                  const BIGNUM *kinv, const BIGNUM *rp, EC_KEY *eckey);
+
+/** Verifies that the given signature is valid ECDSA signature
+ *  of the supplied hash value using the specified public key.
+ *  \param  type     this parameter is ignored
+ *  \param  dgst     pointer to the hash value
+ *  \param  dgstlen  length of the hash value
+ *  \param  sig      pointer to the DER encoded signature
+ *  \param  siglen   length of the DER encoded signature
+ *  \param  eckey    EC_KEY object containing a public EC key
+ *  \return 1 if the signature is valid, 0 if the signature is invalid
+ *          and -1 on error
+ */
+int ECDSA_verify(int type, const unsigned char *dgst, int dgstlen,
+                 const unsigned char *sig, int siglen, EC_KEY *eckey);
+
+/** Returns the maximum length of the DER encoded signature
+ *  \param  eckey  EC_KEY object
+ *  \return numbers of bytes required for the DER encoded signature
+ */
+int ECDSA_size(const EC_KEY *eckey);
+
+/********************************************************************/
+/*  EC_KEY_METHOD constructors, destructors, writers and accessors  */
+/********************************************************************/
+
+EC_KEY_METHOD *EC_KEY_METHOD_new(const EC_KEY_METHOD *meth);
+void EC_KEY_METHOD_free(EC_KEY_METHOD *meth);
+void EC_KEY_METHOD_set_init(EC_KEY_METHOD *meth,
+                            int (*init)(EC_KEY *key),
+                            void (*finish)(EC_KEY *key),
+                            int (*copy)(EC_KEY *dest, const EC_KEY *src),
+                            int (*set_group)(EC_KEY *key, const EC_GROUP *grp),
+                            int (*set_private)(EC_KEY *key,
+                                               const BIGNUM *priv_key),
+                            int (*set_public)(EC_KEY *key,
+                                              const EC_POINT *pub_key));
+
+void EC_KEY_METHOD_set_keygen(EC_KEY_METHOD *meth,
+                              int (*keygen)(EC_KEY *key));
+
+void EC_KEY_METHOD_set_compute_key(EC_KEY_METHOD *meth,
+                                   int (*ckey)(void *out,
+                                               size_t outlen,
+                                               const EC_POINT *pub_key,
+                                               const EC_KEY *ecdh,
+                                               void *(*KDF) (const void *in,
+                                                             size_t inlen,
+                                                             void *out,
+                                                             size_t *outlen)));
+
+void EC_KEY_METHOD_set_sign(EC_KEY_METHOD *meth,
+                            int (*sign)(int type, const unsigned char *dgst,
+                                        int dlen, unsigned char *sig,
+                                        unsigned int *siglen,
+                                        const BIGNUM *kinv, const BIGNUM *r,
+                                        EC_KEY *eckey),
+                            int (*sign_setup)(EC_KEY *eckey, BN_CTX *ctx_in,
+                                              BIGNUM **kinvp, BIGNUM **rp),
+                            ECDSA_SIG *(*sign_sig)(const unsigned char *dgst,
+                                                   int dgst_len,
+                                                   const BIGNUM *in_kinv,
+                                                   const BIGNUM *in_r,
+                                                   EC_KEY *eckey));
+
+void EC_KEY_METHOD_set_verify(EC_KEY_METHOD *meth,
+                              int (*verify)(int type, const unsigned
+                                            char *dgst, int dgst_len,
+                                            const unsigned char *sigbuf,
+                                            int sig_len, EC_KEY *eckey),
+                              int (*verify_sig)(const unsigned char *dgst,
+                                                int dgst_len,
+                                                const ECDSA_SIG *sig,
+                                                EC_KEY *eckey));
+
+void EC_KEY_METHOD_get_init(EC_KEY_METHOD *meth,
+                            int (**pinit)(EC_KEY *key),
+                            void (**pfinish)(EC_KEY *key),
+                            int (**pcopy)(EC_KEY *dest, const EC_KEY *src),
+                            int (**pset_group)(EC_KEY *key,
+                                               const EC_GROUP *grp),
+                            int (**pset_private)(EC_KEY *key,
+                                                 const BIGNUM *priv_key),
+                            int (**pset_public)(EC_KEY *key,
+                                                const EC_POINT *pub_key));
+
+void EC_KEY_METHOD_get_keygen(EC_KEY_METHOD *meth,
+                              int (**pkeygen)(EC_KEY *key));
+
+void EC_KEY_METHOD_get_compute_key(EC_KEY_METHOD *meth,
+                                   int (**pck)(void *out,
+                                               size_t outlen,
+                                               const EC_POINT *pub_key,
+                                               const EC_KEY *ecdh,
+                                               void *(*KDF) (const void *in,
+                                                             size_t inlen,
+                                                             void *out,
+                                                             size_t *outlen)));
+
+void EC_KEY_METHOD_get_sign(EC_KEY_METHOD *meth,
+                            int (**psign)(int type, const unsigned char *dgst,
+                                          int dlen, unsigned char *sig,
+                                          unsigned int *siglen,
+                                          const BIGNUM *kinv, const BIGNUM *r,
+                                          EC_KEY *eckey),
+                            int (**psign_setup)(EC_KEY *eckey, BN_CTX *ctx_in,
+                                                BIGNUM **kinvp, BIGNUM **rp),
+                            ECDSA_SIG *(**psign_sig)(const unsigned char *dgst,
+                                                     int dgst_len,
+                                                     const BIGNUM *in_kinv,
+                                                     const BIGNUM *in_r,
+                                                     EC_KEY *eckey));
+
+void EC_KEY_METHOD_get_verify(EC_KEY_METHOD *meth,
+                              int (**pverify)(int type, const unsigned
+                                              char *dgst, int dgst_len,
+                                              const unsigned char *sigbuf,
+                                              int sig_len, EC_KEY *eckey),
+                              int (**pverify_sig)(const unsigned char *dgst,
+                                                  int dgst_len,
+                                                  const ECDSA_SIG *sig,
+                                                  EC_KEY *eckey));
 
 # define ECParameters_dup(x) ASN1_dup_of(EC_KEY,i2d_ECParameters,d2i_ECParameters,x)
 
@@ -1085,6 +1408,12 @@ void ERR_load_EC_strings(void);
 # define EC_F_DO_EC_KEY_PRINT                             221
 # define EC_F_ECDH_CMS_DECRYPT                            238
 # define EC_F_ECDH_CMS_SET_SHARED_INFO                    239
+# define EC_F_ECDH_COMPUTE_KEY                            246
+# define EC_F_ECDSA_DO_SIGN_EX                            251
+# define EC_F_ECDSA_DO_VERIFY                             252
+# define EC_F_ECDSA_SIGN_EX                               254
+# define EC_F_ECDSA_SIGN_SETUP                            248
+# define EC_F_ECDSA_VERIFY                                253
 # define EC_F_ECKEY_PARAM2TYPE                            223
 # define EC_F_ECKEY_PARAM_DECODE                          212
 # define EC_F_ECKEY_PRIV_DECODE                           213
@@ -1096,6 +1425,11 @@ void ERR_load_EC_strings(void);
 # define EC_F_ECPARAMETERS_PRINT_FP                       148
 # define EC_F_ECPKPARAMETERS_PRINT                        149
 # define EC_F_ECPKPARAMETERS_PRINT_FP                     150
+# define EC_F_ECP_NISTZ256_GET_AFFINE                     240
+# define EC_F_ECP_NISTZ256_MULT_PRECOMPUTE                243
+# define EC_F_ECP_NISTZ256_POINTS_MUL                     241
+# define EC_F_ECP_NISTZ256_PRE_COMP_NEW                   244
+# define EC_F_ECP_NISTZ256_WINDOWED_MUL                   242
 # define EC_F_ECP_NIST_MOD_192                            203
 # define EC_F_ECP_NIST_MOD_224                            204
 # define EC_F_ECP_NIST_MOD_256                            205
@@ -1171,8 +1505,11 @@ void ERR_load_EC_strings(void);
 # define EC_F_EC_KEY_COPY                                 178
 # define EC_F_EC_KEY_GENERATE_KEY                         179
 # define EC_F_EC_KEY_NEW                                  182
+# define EC_F_EC_KEY_NEW_METHOD                           245
+# define EC_F_EC_KEY_OCT2PRIV                             255
 # define EC_F_EC_KEY_PRINT                                180
 # define EC_F_EC_KEY_PRINT_FP                             181
+# define EC_F_EC_KEY_PRIV2OCT                             256
 # define EC_F_EC_KEY_SET_PUBLIC_KEY_AFFINE_COORDINATES    229
 # define EC_F_EC_POINTS_MAKE_AFFINE                       136
 # define EC_F_EC_POINT_ADD                                112
@@ -1207,13 +1544,11 @@ void ERR_load_EC_strings(void);
 # define EC_F_NISTP224_PRE_COMP_NEW                       227
 # define EC_F_NISTP256_PRE_COMP_NEW                       236
 # define EC_F_NISTP521_PRE_COMP_NEW                       237
-# define EC_F_ECP_NISTZ256_GET_AFFINE                     240
-# define EC_F_ECP_NISTZ256_POINTS_MUL                     241
-# define EC_F_ECP_NISTZ256_WINDOWED_MUL                   242
-# define EC_F_ECP_NISTZ256_MULT_PRECOMPUTE                243
-# define EC_F_ECP_NISTZ256_PRE_COMP_NEW                   244
 # define EC_F_O2I_ECPUBLICKEY                             152
 # define EC_F_OLD_EC_PRIV_DECODE                          222
+# define EC_F_OSSL_ECDH_COMPUTE_KEY                       247
+# define EC_F_OSSL_ECDSA_SIGN_SIG                         249
+# define EC_F_OSSL_ECDSA_VERIFY_SIG                       250
 # define EC_F_PKEY_EC_CTRL                                197
 # define EC_F_PKEY_EC_CTRL_STR                            198
 # define EC_F_PKEY_EC_DERIVE                              217
@@ -1224,6 +1559,7 @@ void ERR_load_EC_strings(void);
 /* Reason codes. */
 # define EC_R_ASN1_ERROR                                  115
 # define EC_R_ASN1_UNKNOWN_FIELD                          116
+# define EC_R_BAD_SIGNATURE                               156
 # define EC_R_BIGNUM_OUT_OF_RANGE                         144
 # define EC_R_BUFFER_TOO_SMALL                            100
 # define EC_R_COORDINATES_OUT_OF_RANGE                    146
@@ -1249,21 +1585,27 @@ void ERR_load_EC_strings(void);
 # define EC_R_INVALID_PENTANOMIAL_BASIS                   132
 # define EC_R_INVALID_PRIVATE_KEY                         123
 # define EC_R_INVALID_TRINOMIAL_BASIS                     137
+# define EC_R_KDF_FAILED                                  153
 # define EC_R_KDF_PARAMETER_ERROR                         148
 # define EC_R_KEYS_NOT_SET                                140
 # define EC_R_MISSING_PARAMETERS                          124
 # define EC_R_MISSING_PRIVATE_KEY                         125
+# define EC_R_NEED_NEW_SETUP_VALUES                       157
 # define EC_R_NOT_A_NIST_PRIME                            135
 # define EC_R_NOT_A_SUPPORTED_NIST_PRIME                  136
 # define EC_R_NOT_IMPLEMENTED                             126
 # define EC_R_NOT_INITIALIZED                             111
 # define EC_R_NO_FIELD_MOD                                133
 # define EC_R_NO_PARAMETERS_SET                           139
+# define EC_R_NO_PRIVATE_VALUE                            154
+# define EC_R_OPERATION_NOT_SUPPORTED                     152
 # define EC_R_PASSED_NULL_PARAMETER                       134
 # define EC_R_PEER_KEY_ERROR                              149
 # define EC_R_PKPARAMETERS2GROUP_FAILURE                  127
+# define EC_R_POINT_ARITHMETIC_FAILURE                    155
 # define EC_R_POINT_AT_INFINITY                           106
 # define EC_R_POINT_IS_NOT_ON_CURVE                       107
+# define EC_R_RANDOM_NUMBER_GENERATION_FAILED             158
 # define EC_R_SHARED_INFO_ERROR                           150
 # define EC_R_SLOT_FULL                                   108
 # define EC_R_UNDEFINED_GENERATOR                         113

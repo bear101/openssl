@@ -1,4 +1,3 @@
-/* tasn_enc.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2000.
@@ -59,7 +58,7 @@
 
 #include <stddef.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 #include <openssl/objects.h>
@@ -111,7 +110,7 @@ static int asn1_item_flags_i2d(ASN1_VALUE *val, unsigned char **out,
         if (len <= 0)
             return len;
         buf = OPENSSL_malloc(len);
-        if (!buf)
+        if (buf == NULL)
             return -1;
         p = buf;
         ASN1_item_ex_i2d(&val, &p, it, -1, flags);
@@ -244,7 +243,17 @@ static int asn1_template_ex_i2d(ASN1_VALUE **pval, unsigned char **out,
                                 const ASN1_TEMPLATE *tt, int tag, int iclass)
 {
     int i, ret, flags, ttag, tclass, ndef;
+    ASN1_VALUE *tval;
     flags = tt->flags;
+
+    /*
+     * If field is embedded then val needs fixing so it is a pointer to
+     * a pointer to a field.
+     */
+    if (flags & ASN1_TFLG_EMBED) {
+        tval = (ASN1_VALUE *)pval;
+        pval = &tval;
+    }
     /*
      * Work out tag and class to use: tagging may come either from the
      * template or the arguments, not both because this would create
@@ -413,10 +422,10 @@ static int asn1_set_seq_out(STACK_OF(ASN1_VALUE) *sk, unsigned char **out,
         else {
             derlst = OPENSSL_malloc(sk_ASN1_VALUE_num(sk)
                                     * sizeof(*derlst));
-            if (!derlst)
+            if (derlst == NULL)
                 return 0;
             tmpdat = OPENSSL_malloc(skcontlen);
-            if (!tmpdat) {
+            if (tmpdat == NULL) {
                 OPENSSL_free(derlst);
                 return 0;
             }

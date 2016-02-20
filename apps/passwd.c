@@ -53,7 +53,6 @@
 
 #if !defined(OPENSSL_NO_DES) || !defined(NO_MD5CRYPT_1)
 
-# include <assert.h>
 # include <string.h>
 
 # include "apps.h"
@@ -101,6 +100,8 @@ OPTIONS passwd_options[] = {
     {"quiet", OPT_QUIET, '-', "No warnings"},
     {"table", OPT_TABLE, '-', "Format output as table"},
     {"reverse", OPT_REVERSE, '-', "Switch table columns"},
+    {"salt", OPT_SALT, 's', "Use provided salt"},
+    {"stdin", OPT_STDIN, '-', "Read passwords from stdin"},
 # ifndef NO_MD5CRYPT_1
     {"apr1", OPT_APR1, '-', "MD5-based password algorithm, Apache variant"},
     {"1", OPT_1, '-', "MD5-based password algorithm"},
@@ -108,8 +109,6 @@ OPTIONS passwd_options[] = {
 # ifndef OPENSSL_NO_DES
     {"crypt", OPT_CRYPT, '-', "Standard Unix password algorithm (default)"},
 # endif
-    {"salt", OPT_SALT, 's', "Use provided salt"},
-    {"stdin", OPT_STDIN, '-', "Read passwords from stdin"},
     {NULL}
 };
 
@@ -207,7 +206,7 @@ int passwd_main(int argc, char **argv)
         goto end;
     }
 
-    in = bio_open_default(infile, "r");
+    in = bio_open_default(infile, 'r', FORMAT_TEXT);
     if (in == NULL)
         goto end;
 
@@ -308,60 +307,65 @@ static char *md5crypt(const char *passwd, const char *magic, const char *salt)
     char *salt_out;
     int n;
     unsigned int i;
-    EVP_MD_CTX md, md2;
+    EVP_MD_CTX *md, *md2;
     size_t passwd_len, salt_len;
 
     passwd_len = strlen(passwd);
     out_buf[0] = '$';
     out_buf[1] = 0;
     assert(strlen(magic) <= 4); /* "1" or "apr1" */
-    strncat(out_buf, magic, 4);
-    strncat(out_buf, "$", 1);
-    strncat(out_buf, salt, 8);
+    OPENSSL_strlcat(out_buf, magic, sizeof out_buf);
+    OPENSSL_strlcat(out_buf, "$", sizeof out_buf);
+    OPENSSL_strlcat(out_buf, salt, sizeof out_buf);
     assert(strlen(out_buf) <= 6 + 8); /* "$apr1$..salt.." */
     salt_out = out_buf + 2 + strlen(magic);
     salt_len = strlen(salt_out);
     assert(salt_len <= 8);
 
-    EVP_MD_CTX_init(&md);
-    EVP_DigestInit_ex(&md, EVP_md5(), NULL);
-    EVP_DigestUpdate(&md, passwd, passwd_len);
-    EVP_DigestUpdate(&md, "$", 1);
-    EVP_DigestUpdate(&md, magic, strlen(magic));
-    EVP_DigestUpdate(&md, "$", 1);
-    EVP_DigestUpdate(&md, salt_out, salt_len);
+    md = EVP_MD_CTX_new();
+    if (md == NULL)
+        return NULL;
+    EVP_DigestInit_ex(md, EVP_md5(), NULL);
+    EVP_DigestUpdate(md, passwd, passwd_len);
+    EVP_DigestUpdate(md, "$", 1);
+    EVP_DigestUpdate(md, magic, strlen(magic));
+    EVP_DigestUpdate(md, "$", 1);
+    EVP_DigestUpdate(md, salt_out, salt_len);
 
-    EVP_MD_CTX_init(&md2);
-    EVP_DigestInit_ex(&md2, EVP_md5(), NULL);
-    EVP_DigestUpdate(&md2, passwd, passwd_len);
-    EVP_DigestUpdate(&md2, salt_out, salt_len);
-    EVP_DigestUpdate(&md2, passwd, passwd_len);
-    EVP_DigestFinal_ex(&md2, buf, NULL);
+    md2 = EVP_MD_CTX_new();
+    if (md2 == NULL)
+        return NULL;
+    EVP_DigestInit_ex(md2, EVP_md5(), NULL);
+    EVP_DigestUpdate(md2, passwd, passwd_len);
+    EVP_DigestUpdate(md2, salt_out, salt_len);
+    EVP_DigestUpdate(md2, passwd, passwd_len);
+    EVP_DigestFinal_ex(md2, buf, NULL);
 
     for (i = passwd_len; i > sizeof buf; i -= sizeof buf)
-        EVP_DigestUpdate(&md, buf, sizeof buf);
-    EVP_DigestUpdate(&md, buf, i);
+        EVP_DigestUpdate(md, buf, sizeof buf);
+    EVP_DigestUpdate(md, buf, i);
 
     n = passwd_len;
     while (n) {
-        EVP_DigestUpdate(&md, (n & 1) ? "\0" : passwd, 1);
+        EVP_DigestUpdate(md, (n & 1) ? "\0" : passwd, 1);
         n >>= 1;
     }
-    EVP_DigestFinal_ex(&md, buf, NULL);
+    EVP_DigestFinal_ex(md, buf, NULL);
 
     for (i = 0; i < 1000; i++) {
-        EVP_DigestInit_ex(&md2, EVP_md5(), NULL);
-        EVP_DigestUpdate(&md2, (i & 1) ? (unsigned const char *)passwd : buf,
+        EVP_DigestInit_ex(md2, EVP_md5(), NULL);
+        EVP_DigestUpdate(md2, (i & 1) ? (unsigned const char *)passwd : buf,
                          (i & 1) ? passwd_len : sizeof buf);
         if (i % 3)
-            EVP_DigestUpdate(&md2, salt_out, salt_len);
+            EVP_DigestUpdate(md2, salt_out, salt_len);
         if (i % 7)
-            EVP_DigestUpdate(&md2, passwd, passwd_len);
-        EVP_DigestUpdate(&md2, (i & 1) ? buf : (unsigned const char *)passwd,
+            EVP_DigestUpdate(md2, passwd, passwd_len);
+        EVP_DigestUpdate(md2, (i & 1) ? buf : (unsigned const char *)passwd,
                          (i & 1) ? sizeof buf : passwd_len);
-        EVP_DigestFinal_ex(&md2, buf, NULL);
+        EVP_DigestFinal_ex(md2, buf, NULL);
     }
-    EVP_MD_CTX_cleanup(&md2);
+    EVP_MD_CTX_free(md2);
+    EVP_MD_CTX_free(md);
 
     {
         /* transform buf into output string */
@@ -400,7 +404,6 @@ static char *md5crypt(const char *passwd, const char *magic, const char *salt)
         *output = 0;
         assert(strlen(out_buf) < sizeof(out_buf));
     }
-    EVP_MD_CTX_cleanup(&md);
 
     return out_buf;
 }
@@ -493,7 +496,7 @@ static int do_passwd(int passed_salt, char **salt_p, char **salt_malloc_p,
 
 int passwd_main(int argc, char **argv)
 {
-    fputs("Program not available.\n", stderr)
-        return (1);
+    BIO_printf(bio_err, "Program not available.\n");
+    return (1);
 }
 #endif

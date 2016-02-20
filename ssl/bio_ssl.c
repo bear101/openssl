@@ -1,4 +1,3 @@
-/* ssl/bio_ssl.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -101,13 +100,12 @@ BIO_METHOD *BIO_f_ssl(void)
 
 static int ssl_new(BIO *bi)
 {
-    BIO_SSL *bs = OPENSSL_malloc(sizeof(*bs));
+    BIO_SSL *bs = OPENSSL_zalloc(sizeof(*bs));
 
     if (bs == NULL) {
         BIOerr(BIO_F_SSL_NEW, ERR_R_MALLOC_FAILURE);
         return (0);
     }
-    memset(bs, 0, sizeof(*bs));
     bi->init = 0;
     bi->ptr = (char *)bs;
     bi->flags = 0;
@@ -407,6 +405,10 @@ static long ssl_ctrl(BIO *b, int cmd, long num, void *ptr)
         case SSL_ERROR_WANT_CONNECT:
             BIO_set_flags(b, BIO_FLAGS_IO_SPECIAL | BIO_FLAGS_SHOULD_RETRY);
             b->retry_reason = b->next_bio->retry_reason;
+            break;
+        case SSL_ERROR_WANT_X509_LOOKUP:
+            BIO_set_retry_special(b);
+            b->retry_reason = BIO_RR_SSL_X509_LOOKUP;
             break;
         default:
             break;

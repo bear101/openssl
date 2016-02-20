@@ -1,4 +1,3 @@
-/* crypto/ec/ecp_smpl.c */
 /*
  * Includes code written by Lenka Fibikova <fibikova@exp-math.uni-essen.de>
  * for the OpenSSL project. Includes code written by Bodo Moeller for the
@@ -132,7 +131,7 @@ int ec_GFp_simple_group_init(EC_GROUP *group)
     group->field = BN_new();
     group->a = BN_new();
     group->b = BN_new();
-    if (!group->field || !group->a || !group->b) {
+    if (group->field == NULL || group->a == NULL || group->b == NULL) {
         BN_free(group->field);
         BN_free(group->a);
         BN_free(group->b);
@@ -359,7 +358,7 @@ int ec_GFp_simple_point_init(EC_POINT *point)
     point->Z = BN_new();
     point->Z_is_one = 0;
 
-    if (!point->X || !point->Y || !point->Z) {
+    if (point->X == NULL || point->Y == NULL || point->Z == NULL) {
         BN_free(point->X);
         BN_free(point->Y);
         BN_free(point->Z);

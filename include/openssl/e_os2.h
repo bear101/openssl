@@ -1,4 +1,3 @@
-/* e_os2.h */
 /* ====================================================================
  * Copyright (c) 1998-2000 The OpenSSL Project.  All rights reserved.
  *
@@ -53,10 +52,10 @@
  *
  */
 
-#include <openssl/opensslconf.h>
-
 #ifndef HEADER_E_OS2_H
 # define HEADER_E_OS2_H
+
+# include <openssl/opensslconf.h>
 
 #ifdef  __cplusplus
 extern "C" {
@@ -90,7 +89,13 @@ extern "C" {
  * For 32 bit environment, there seems to be the CygWin environment and then
  * all the others that try to do the same thing Microsoft does...
  */
-# if defined(OPENSSL_SYS_UWIN)
+/*
+ * UEFI lives here because it might be built with a Microsoft toolchain and
+ * we need to avoid the false positive match on Windows.
+ */
+# if defined(OPENSSL_SYS_UEFI)
+#  undef OPENSSL_SYS_UNIX
+# elif defined(OPENSSL_SYS_UWIN)
 #  undef OPENSSL_SYS_UNIX
 #  define OPENSSL_SYS_WIN32_UWIN
 # else
@@ -104,6 +109,12 @@ extern "C" {
 #     define OPENSSL_SYS_WIN32
 #    endif
 #   endif
+#   if defined(_WIN64) || defined(OPENSSL_SYS_WIN64)
+#    undef OPENSSL_SYS_UNIX
+#    if !defined(OPENSSL_SYS_WIN64)
+#     define OPENSSL_SYS_WIN64
+#    endif
+#   endif
 #   if defined(OPENSSL_SYS_WINNT)
 #    undef OPENSSL_SYS_UNIX
 #   endif
@@ -114,7 +125,7 @@ extern "C" {
 # endif
 
 /* Anything that tries to look like Microsoft is "Windows" */
-# if defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_WINNT) || defined(OPENSSL_SYS_WINCE)
+# if defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_WIN64) || defined(OPENSSL_SYS_WINNT) || defined(OPENSSL_SYS_WINCE)
 #  undef OPENSSL_SYS_UNIX
 #  define OPENSSL_SYS_WINDOWS
 #  ifndef OPENSSL_SYS_MSDOS
@@ -195,7 +206,7 @@ extern "C" {
 /*-
  * Definitions of OPENSSL_GLOBAL and OPENSSL_EXTERN, to define and declare
  * certain global symbols that, with some compilers under VMS, have to be
- * defined and declared explicitely with globaldef and globalref.
+ * defined and declared explicitly with globaldef and globalref.
  * Definitions of OPENSSL_EXPORT and OPENSSL_IMPORT, to define and declare
  * DLL exports and imports for compilers under Win32.  These are a little
  * more complicated to use.  Basically, for any library that exports some
@@ -207,25 +218,23 @@ extern "C" {
  * # define OPENSSL_EXTERN OPENSSL_EXPORT
  * #endif
  *
- * The default is to have OPENSSL_EXPORT, OPENSSL_IMPORT and OPENSSL_GLOBAL
- * have some generally sensible values, and for OPENSSL_EXTERN to have the
- * value OPENSSL_IMPORT.
+ * The default is to have OPENSSL_EXPORT, OPENSSL_EXTERN and OPENSSL_GLOBAL
+ * have some generally sensible values.
  */
 
 # if defined(OPENSSL_SYS_VMS_NODECC)
 #  define OPENSSL_EXPORT globalref
-#  define OPENSSL_IMPORT globalref
+#  define OPENSSL_EXTERN globalref
 #  define OPENSSL_GLOBAL globaldef
 # elif defined(OPENSSL_SYS_WINDOWS) && defined(OPENSSL_OPT_WINDLL)
 #  define OPENSSL_EXPORT extern __declspec(dllexport)
-#  define OPENSSL_IMPORT extern __declspec(dllimport)
+#  define OPENSSL_EXTERN extern __declspec(dllimport)
 #  define OPENSSL_GLOBAL
 # else
 #  define OPENSSL_EXPORT extern
-#  define OPENSSL_IMPORT extern
+#  define OPENSSL_EXTERN extern
 #  define OPENSSL_GLOBAL
 # endif
-# define OPENSSL_EXTERN OPENSSL_IMPORT
 
 /*-
  * Macros to allow global variables to be reached through function calls when
@@ -250,22 +259,94 @@ extern "C" {
 #  define OPENSSL_GLOBAL_REF(name) _shadow_##name
 # endif
 
-# ifdef OPENSSL_SYS_MSDOS
-#  define ossl_ssize_t long
+# ifdef _WIN32
+#  ifdef _WIN64
+#   define ossl_ssize_t __int64
+#   define OSSL_SSIZE_MAX _I64_MAX
+#  else
+#   define ossl_ssize_t int
+#   define OSSL_SSIZE_MAX INT_MAX
+#  endif
 # endif
 
-# if defined(__ultrix) && !defined(ssize_t)
+# if (defined(__ultrix) || defined(OPENSSL_SYS_UEFI)) && !defined(ssize_t)
 #  define ossl_ssize_t int
+#  define OSSL_SSIZE_MAX INT_MAX
 # endif
 
 # ifndef ossl_ssize_t
 #  define ossl_ssize_t ssize_t
+#  define OSSL_SSIZE_MAX SSIZE_MAX
 # endif
 
 # ifdef DEBUG_UNUSED
 #  define __owur __attribute__((__warn_unused_result__))
 # else
 #  define __owur
+# endif
+
+/* Standard integer types */
+# if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || \
+     defined(__osf__) || defined(__sgi) || defined(__hpux) || \
+     defined(OPENSSL_SYS_VMS)
+#  include <inttypes.h>
+# elif defined(OPENSSL_SYS_UEFI)
+typedef INT8 int8_t;
+typedef UINT8 uint8_t;
+typedef INT16 int16_t;
+typedef UINT16 uint16_t;
+typedef INT32 int32_t;
+typedef UINT32 uint32_t;
+typedef INT64 int64_t;
+typedef UINT64 uint64_t;
+# elif defined(_MSC_VER) && _MSC_VER<=1500
+/*
+ * minimally required typdefs for systems not supporting inttypes.h or
+ * stdint.h: currently just older VC++
+ */
+typedef signed char int8_t;
+typedef unsigned char uint8_t;
+typedef short int16_t;
+typedef unsigned short uint16_t;
+typedef int int32_t;
+typedef unsigned int uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+# else
+#  include <stdint.h>
+# endif
+
+/*
+ * We need a format operator for some client tools for uint64_t.  If inttypes.h
+ * isn't available or did not define it, just go with hard-coded.
+ */
+# ifndef PRIu64
+#  ifdef SIXTY_FOUR_BIT_LONG
+#   define PRIu64 "lu"
+#  else
+#   define PRIu64 "llu"
+#  endif
+# endif
+
+/* ossl_inline: portable inline definition usable in public headers */
+# if !defined(inline) && !defined(__cplusplus)
+#  if defined(__STDC_VERSION__) && __STDC_VERSION__>=199901L
+   /* just use inline */
+#   define ossl_inline inline
+#  elif defined(__GNUC__) && __GNUC__>=2
+#   define ossl_inline __inline__
+#  elif defined(_MSC_VER)
+  /*
+   * Visual Studio: inline is available in C++ only, however
+   * __inline is available for C, see
+   * http://msdn.microsoft.com/en-us/library/z8y1yy88.aspx
+   */
+#   define ossl_inline __inline
+#  else
+#   define ossl_inline
+#  endif
+# else
+#  define ossl_inline inline
 # endif
 
 #ifdef  __cplusplus

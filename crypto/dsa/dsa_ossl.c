@@ -1,4 +1,3 @@
-/* crypto/dsa/dsa_ossl.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -59,7 +58,7 @@
 /* Original version from Steven Schoch <schoch@sheba.arc.nasa.gov> */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/sha.h>
 #include <openssl/dsa.h>
@@ -144,7 +143,7 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
 
     m = BN_new();
     xr = BN_new();
-    if (!m || !xr)
+    if (m == NULL || xr == NULL)
         goto err;
 
     if (!dsa->p || !dsa->q || !dsa->g) {
@@ -191,9 +190,6 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
     if (!BN_mod_mul(s, s, kinv, dsa->q, ctx))
         goto err;
 
-    ret = DSA_SIG_new();
-    if (ret == NULL)
-        goto err;
     /*
      * Redo if r or s is zero as required by FIPS 186-3: this is very
      * unlikely.
@@ -205,11 +201,14 @@ static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
         }
         goto redo;
     }
+    ret = DSA_SIG_new();
+    if (ret == NULL)
+        goto err;
     ret->r = r;
     ret->s = s;
 
  err:
-    if (!ret) {
+    if (ret == NULL) {
         DSAerr(DSA_F_DSA_DO_SIGN, reason);
         BN_free(r);
         BN_free(s);
@@ -242,7 +241,7 @@ static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in,
 
     k = BN_new();
     kq = BN_new();
-    if (!k || !kq)
+    if (k == NULL || kq == NULL)
         goto err;
 
     if (ctx_in == NULL) {
@@ -356,7 +355,7 @@ static int dsa_do_verify(const unsigned char *dgst, int dgst_len,
     u2 = BN_new();
     t1 = BN_new();
     ctx = BN_CTX_new();
-    if (!u1 || !u2 || !t1 || !ctx)
+    if (u1 == NULL || u2 == NULL || t1 == NULL || ctx == NULL)
         goto err;
 
     if (BN_is_zero(sig->r) || BN_is_negative(sig->r) ||

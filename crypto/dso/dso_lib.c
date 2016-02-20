@@ -1,4 +1,3 @@
-/* dso_lib.c -*- mode:C; c-file-style: "eay" -*- */
 /*
  * Written by Geoff Thorpe (geoff@geoffthorpe.net) for the OpenSSL project
  * 2000.
@@ -59,7 +58,7 @@
 
 #include <stdio.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/dso.h>
 
 static DSO_METHOD *default_DSO_meth = NULL;
@@ -104,12 +103,11 @@ DSO *DSO_new_method(DSO_METHOD *meth)
          */
         default_DSO_meth = DSO_METHOD_openssl();
     }
-    ret = OPENSSL_malloc(sizeof(*ret));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         DSOerr(DSO_F_DSO_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    memset(ret, 0, sizeof(*ret));
     ret->meth_data = sk_void_new_null();
     if (ret->meth_data == NULL) {
         /* sk_new doesn't generate any errors so we do */
@@ -123,6 +121,7 @@ DSO *DSO_new_method(DSO_METHOD *meth)
         ret->meth = meth;
     ret->references = 1;
     if ((ret->meth->init != NULL) && !ret->meth->init(ret)) {
+        sk_void_free(ret->meth_data);
         OPENSSL_free(ret);
         ret = NULL;
     }
@@ -137,17 +136,10 @@ int DSO_free(DSO *dso)
         return (1);
 
     i = CRYPTO_add(&dso->references, -1, CRYPTO_LOCK_DSO);
-#ifdef REF_PRINT
-    REF_PRINT("DSO", dso);
-#endif
+    REF_PRINT_COUNT("DSO", dso);
     if (i > 0)
         return (1);
-#ifdef REF_CHECK
-    if (i < 0) {
-        fprintf(stderr, "DSO_free, bad reference count\n");
-        abort();
-    }
-#endif
+    REF_ASSERT_ISNT(i < 0);
 
     if ((dso->meth->dso_unload != NULL) && !dso->meth->dso_unload(dso)) {
         DSOerr(DSO_F_DSO_FREE, DSO_R_UNLOAD_FAILED);
@@ -354,7 +346,7 @@ int DSO_set_filename(DSO *dso, const char *filename)
         DSOerr(DSO_F_DSO_SET_FILENAME, ERR_R_MALLOC_FAILURE);
         return (0);
     }
-    BUF_strlcpy(copied, filename, strlen(filename) + 1);
+    OPENSSL_strlcpy(copied, filename, strlen(filename) + 1);
     OPENSSL_free(dso->filename);
     dso->filename = copied;
     return (1);
@@ -403,7 +395,7 @@ char *DSO_convert_filename(DSO *dso, const char *filename)
             DSOerr(DSO_F_DSO_CONVERT_FILENAME, ERR_R_MALLOC_FAILURE);
             return (NULL);
         }
-        BUF_strlcpy(result, filename, strlen(filename) + 1);
+        OPENSSL_strlcpy(result, filename, strlen(filename) + 1);
     }
     return (result);
 }

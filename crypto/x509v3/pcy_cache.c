@@ -1,4 +1,3 @@
-/* pcy_cache.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2004.
@@ -57,9 +56,10 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#include "internal/x509_int.h"
 
 #include "pcy_int.h"
 
@@ -83,12 +83,12 @@ static int policy_cache_create(X509 *x,
     if (sk_POLICYINFO_num(policies) == 0)
         goto bad_policy;
     cache->data = sk_X509_POLICY_DATA_new(policy_data_cmp);
-    if (!cache->data)
+    if (cache->data == NULL)
         goto bad_policy;
     for (i = 0; i < sk_POLICYINFO_num(policies); i++) {
         policy = sk_POLICYINFO_value(policies, i);
         data = policy_data_new(policy, NULL, crit);
-        if (!data)
+        if (data == NULL)
             goto bad_policy;
         /*
          * Duplicate policy OIDs are illegal: reject if matches found.
@@ -128,7 +128,7 @@ static int policy_cache_new(X509 *x)
     POLICY_MAPPINGS *ext_pmaps = NULL;
     int i;
     cache = OPENSSL_malloc(sizeof(*cache));
-    if (!cache)
+    if (cache == NULL)
         return 0;
     cache->anyPolicy = NULL;
     cache->data = NULL;

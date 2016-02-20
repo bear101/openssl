@@ -1,4 +1,3 @@
-/* crypto/asn1/a_d2i_fp.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,7 +57,7 @@
 
 #include <stdio.h>
 #include <limits.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/asn1.h>
 

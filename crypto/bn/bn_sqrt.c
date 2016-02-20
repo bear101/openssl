@@ -1,4 +1,3 @@
-/* crypto/bn/bn_sqrt.c */
 /*
  * Written by Lenka Fibikova <fibikova@exp-math.uni-essen.de> and Bodo
  * Moeller for the OpenSSL project.
@@ -57,7 +56,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "bn_lcl.h"
 
 BIGNUM *BN_mod_sqrt(BIGNUM *in, const BIGNUM *a, const BIGNUM *p, BN_CTX *ctx)

@@ -1,4 +1,3 @@
-/* crypto/sha/sha1test.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -88,7 +87,7 @@ int main(int argc, char *argv[])
     char **P, **R;
     static unsigned char buf[1000];
     char *p, *r;
-    EVP_MD_CTX c;
+    EVP_MD_CTX *c;
     unsigned char md[SHA_DIGEST_LENGTH];
 
 #ifdef CHARSET_EBCDIC
@@ -96,7 +95,7 @@ int main(int argc, char *argv[])
     ebcdic2ascii(test[1], test[1], strlen(test[1]));
 #endif
 
-    EVP_MD_CTX_init(&c);
+    c = EVP_MD_CTX_new();
     P = test;
     R = ret;
     i = 1;
@@ -118,10 +117,10 @@ int main(int argc, char *argv[])
 #ifdef CHARSET_EBCDIC
     ebcdic2ascii(buf, buf, 1000);
 #endif                         /* CHARSET_EBCDIC */
-    EVP_DigestInit_ex(&c, EVP_sha1(), NULL);
+    EVP_DigestInit_ex(c, EVP_sha1(), NULL);
     for (i = 0; i < 1000; i++)
-        EVP_DigestUpdate(&c, buf, 1000);
-    EVP_DigestFinal_ex(&c, md, NULL);
+        EVP_DigestUpdate(c, buf, 1000);
+    EVP_DigestFinal_ex(c, md, NULL);
     p = pt(md);
 
     r = bigret;
@@ -136,8 +135,8 @@ int main(int argc, char *argv[])
     if (err)
         printf("ERROR: %d\n", err);
 #endif
+    EVP_MD_CTX_free(c);
     EXIT(err);
-    EVP_MD_CTX_cleanup(&c);
     return (0);
 }
 

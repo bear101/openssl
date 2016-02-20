@@ -1,4 +1,3 @@
-/* crypto/rsa/rsa_chk.c  -*- Mode: C; c-file-style: "eay" -*- */
 /* ====================================================================
  * Copyright (c) 1999 The OpenSSL Project.  All rights reserved.
  *

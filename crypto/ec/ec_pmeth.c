@@ -57,12 +57,11 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/ec.h>
 #include "ec_lcl.h"
-#include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 #include "internal/evp_int.h"
 
@@ -92,22 +91,13 @@ static int pkey_ec_init(EVP_PKEY_CTX *ctx)
 {
     EC_PKEY_CTX *dctx;
 
-    dctx = OPENSSL_malloc(sizeof(*dctx));
-    if (!dctx)
+    dctx = OPENSSL_zalloc(sizeof(*dctx));
+    if (dctx == NULL)
         return 0;
-    dctx->gen_group = NULL;
-    dctx->md = NULL;
 
     dctx->cofactor_mode = -1;
-    dctx->co_key = NULL;
     dctx->kdf_type = EVP_PKEY_ECDH_KDF_NONE;
-    dctx->kdf_md = NULL;
-    dctx->kdf_outlen = 0;
-    dctx->kdf_ukm = NULL;
-    dctx->kdf_ukmlen = 0;
-
     ctx->data = dctx;
-
     return 1;
 }
 
@@ -134,7 +124,7 @@ static int pkey_ec_copy(EVP_PKEY_CTX *dst, EVP_PKEY_CTX *src)
     dctx->kdf_md = sctx->kdf_md;
     dctx->kdf_outlen = sctx->kdf_outlen;
     if (sctx->kdf_ukm) {
-        dctx->kdf_ukm = BUF_memdup(sctx->kdf_ukm, sctx->kdf_ukmlen);
+        dctx->kdf_ukm = OPENSSL_memdup(sctx->kdf_ukm, sctx->kdf_ukmlen);
         if (!dctx->kdf_ukm)
             return 0;
     } else
@@ -257,7 +247,7 @@ static int pkey_ec_kdf_derive(EVP_PKEY_CTX *ctx,
     if (!pkey_ec_derive(ctx, NULL, &ktmplen))
         return 0;
     ktmp = OPENSSL_malloc(ktmplen);
-    if (!ktmp)
+    if (ktmp == NULL)
         return 0;
     if (!pkey_ec_derive(ctx, ktmp, &ktmplen))
         goto err;
@@ -427,7 +417,7 @@ static int pkey_ec_ctrl_str(EVP_PKEY_CTX *ctx,
         return EVP_PKEY_CTX_set_ec_param_enc(ctx, param_enc);
     } else if (strcmp(type, "ecdh_kdf_md") == 0) {
         const EVP_MD *md;
-        if (!(md = EVP_get_digestbyname(value))) {
+        if ((md = EVP_get_digestbyname(value)) == NULL) {
             ECerr(EC_F_PKEY_EC_CTRL_STR, EC_R_INVALID_DIGEST);
             return 0;
         }
@@ -451,7 +441,7 @@ static int pkey_ec_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey)
         return 0;
     }
     ec = EC_KEY_new();
-    if (!ec)
+    if (ec == NULL)
         return 0;
     ret = EC_KEY_set_group(ec, dctx->gen_group);
     if (ret)

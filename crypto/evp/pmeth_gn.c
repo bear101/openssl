@@ -1,4 +1,3 @@
-/* pmeth_gn.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2006.
@@ -59,7 +58,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/evp.h>
 #include "internal/bn_int.h"
@@ -96,11 +95,16 @@ int EVP_PKEY_paramgen(EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey)
         return -1;
     }
 
-    if (!ppkey)
+    if (ppkey == NULL)
         return -1;
 
-    if (!*ppkey)
+    if (*ppkey == NULL)
         *ppkey = EVP_PKEY_new();
+
+    if (*ppkey == NULL) {
+        EVPerr(EVP_F_EVP_PKEY_PARAMGEN, ERR_R_MALLOC_FAILURE);
+        return -1;
+    }
 
     ret = ctx->pmeth->paramgen(ctx, *ppkey);
     if (ret <= 0) {
@@ -141,11 +145,13 @@ int EVP_PKEY_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey)
         return -1;
     }
 
-    if (!ppkey)
+    if (ppkey == NULL)
         return -1;
 
-    if (!*ppkey)
+    if (*ppkey == NULL)
         *ppkey = EVP_PKEY_new();
+    if (*ppkey == NULL)
+        return -1;
 
     ret = ctx->pmeth->keygen(ctx, *ppkey);
     if (ret <= 0) {

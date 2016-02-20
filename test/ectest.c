@@ -1,4 +1,3 @@
-/* crypto/ec/ectest.c */
 /*
  * Originally written by Bodo Moeller for the OpenSSL project.
  */
@@ -319,7 +318,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, Q, x, 1, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, Q, ctx)) {
+    if (EC_POINT_is_on_curve(group, Q, ctx) <= 0) {
         if (!EC_POINT_get_affine_coordinates_GFp(group, Q, x, y, ctx))
             ABORT;
         fprintf(stderr, "Point is not on curve: x = 0x");
@@ -439,7 +438,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_affine_coordinates_GFp(group, P, x, y, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn(&z, "0100000000000000000001F4C8F927AED3CA752257"))
         ABORT;
@@ -466,7 +465,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_160 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_160 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_160, group))
         ABORT;
@@ -488,7 +487,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, P, x, 1, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn(&z, "FFFFFFFFFFFFFFFFFFFFFFFF99DEF836146BC9B1B4D22831"))
         ABORT;
@@ -515,7 +514,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_192 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_192 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_192, group))
         ABORT;
@@ -541,7 +540,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, P, x, 0, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn
         (&z, "FFFFFFFFFFFFFFFFFFFFFFFFFFFF16A2E0B8F03E13DD29455C5C2A3D"))
@@ -570,7 +569,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_224 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_224 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_224, group))
         ABORT;
@@ -600,7 +599,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, P, x, 1, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn(&z, "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E"
                    "84F3B9CAC2FC632551"))
@@ -630,7 +629,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_256 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_256 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_256, group))
         ABORT;
@@ -656,7 +655,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, P, x, 1, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn(&z, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
                    "FFC7634D81F4372DDF581A0DB248B0A77AECEC196ACCC52973"))
@@ -685,7 +684,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_384 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_384 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_384, group))
         ABORT;
@@ -715,7 +714,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_set_compressed_coordinates_GFp(group, P, x, 0, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!BN_hex2bn(&z, "1FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
                    "FFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5"
@@ -746,7 +745,7 @@ static void prime_field_tests(void)
 
     group_order_tests(group);
 
-    if (!(P_521 = EC_GROUP_new(EC_GROUP_method_of(group))))
+    if ((P_521 = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL)
         ABORT;
     if (!EC_GROUP_copy(P_521, group))
         ABORT;
@@ -759,7 +758,7 @@ static void prime_field_tests(void)
         ABORT;
     if (!EC_POINT_dbl(group, P, P, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!EC_POINT_invert(group, Q, ctx))
         ABORT;                  /* P = -2Q */
@@ -877,7 +876,7 @@ static void prime_field_tests(void)
 #  define CHAR2_CURVE_TEST_INTERNAL(_name, _p, _a, _b, _x, _y, _y_bit, _order, _cof, _degree, _variable) \
         if (!BN_hex2bn(&x, _x)) ABORT; \
         if (!EC_POINT_set_compressed_coordinates_GF2m(group, P, x, _y_bit, ctx)) ABORT; \
-        if (!EC_POINT_is_on_curve(group, P, ctx)) ABORT; \
+        if (EC_POINT_is_on_curve(group, P, ctx) <= 0) ABORT; \
         if (!BN_hex2bn(&z, _order)) ABORT; \
         if (!BN_hex2bn(&cof, _cof)) ABORT; \
         if (!EC_GROUP_set_generator(group, P, z, cof)) ABORT; \
@@ -895,7 +894,7 @@ static void prime_field_tests(void)
         if (!BN_hex2bn(&x, _x)) ABORT; \
         if (!BN_hex2bn(&y, _y)) ABORT; \
         if (!EC_POINT_set_affine_coordinates_GF2m(group, P, x, y, ctx)) ABORT; \
-        if (!EC_POINT_is_on_curve(group, P, ctx)) ABORT; \
+        if (EC_POINT_is_on_curve(group, P, ctx) <= 0) ABORT; \
         if (!BN_hex2bn(&z, _order)) ABORT; \
         if (!BN_hex2bn(&cof, _cof)) ABORT; \
         if (!EC_GROUP_set_generator(group, P, z, cof)) ABORT; \
@@ -916,7 +915,7 @@ static void prime_field_tests(void)
         if (EC_GROUP_get_degree(group) != _degree) ABORT; \
         fprintf(stdout, " ok\n"); \
         group_order_tests(group); \
-        if (!(_variable = EC_GROUP_new(EC_GROUP_method_of(group)))) ABORT; \
+        if ((_variable = EC_GROUP_new(EC_GROUP_method_of(group))) == NULL) ABORT; \
         if (!EC_GROUP_copy(_variable, group)) ABORT; \
 
 # ifndef OPENSSL_NO_EC2M
@@ -1024,7 +1023,7 @@ static void char2_field_tests(void)
     if (!EC_POINT_set_affine_coordinates_GF2m(group, Q, x, y, ctx))
         ABORT;
 #  endif
-    if (!EC_POINT_is_on_curve(group, Q, ctx)) {
+    if (EC_POINT_is_on_curve(group, Q, ctx) <= 0) {
 /* Change test based on whether binary point compression is enabled or not. */
 #  ifdef OPENSSL_EC_BIN_PT_COMP
         if (!EC_POINT_get_affine_coordinates_GF2m(group, Q, x, y, ctx))
@@ -1245,7 +1244,7 @@ static void char2_field_tests(void)
         ABORT;
     if (!EC_POINT_dbl(group, P, P, ctx))
         ABORT;
-    if (!EC_POINT_is_on_curve(group, P, ctx))
+    if (EC_POINT_is_on_curve(group, P, ctx) <= 0)
         ABORT;
     if (!EC_POINT_invert(group, Q, ctx))
         ABORT;                  /* P = -2Q */
@@ -1398,6 +1397,20 @@ static void internal_curve_test(void)
         fprintf(stdout, " failed\n\n");
         ABORT;
     }
+
+    /* Test all built-in curves and let the library choose the EC_METHOD */
+    for (n = 0; n < crv_len; n++) {
+        EC_GROUP *group = NULL;
+        int nid = curves[n].nid;
+        fprintf(stdout, "%s:\n", OBJ_nid2sn(nid));
+        fflush(stdout);
+        if ((group = EC_GROUP_new_by_curve_name(nid)) == NULL) {
+            ABORT;
+        }
+        group_order_tests(group);
+        EC_GROUP_free(group);
+    }
+
     OPENSSL_free(curves);
     return;
 }
@@ -1412,7 +1425,7 @@ struct nistp_test_params {
     int degree;
     /*
      * Qx, Qy and D are taken from
-     * http://csrcdocut.gov/groups/ST/toolkit/documents/Examples/ECDSA_Prime.pdf
+     * http://csrc.nist.gov/groups/ST/toolkit/documents/Examples/ECDSA_Prime.pdf
      * Otherwise, values are standard curve parameters from FIPS 180-3
      */
     const char *p, *a, *b, *Qx, *Qy, *Gx, *Gy, *order, *d;
@@ -1579,8 +1592,17 @@ static void nistp_single_test(const struct nistp_test_params *test)
     if (0 != EC_POINT_cmp(NISTP, Q, Q_CHECK, ctx))
         ABORT;
 
+    /*
+     * We have not performed precomputation so have_precompute mult should be
+     * false
+     */
+    if (EC_GROUP_have_precompute_mult(NISTP))
+        ABORT;
+
     /* now repeat all tests with precomputation */
     if (!EC_GROUP_precompute_mult(NISTP, ctx))
+        ABORT;
+    if (!EC_GROUP_have_precompute_mult(NISTP))
         ABORT;
 
     /* fixed point multiplication */
@@ -1637,18 +1659,12 @@ static const char rnd_seed[] =
 
 int main(int argc, char *argv[])
 {
+    char *p;
 
-    /* enable memory leak checking unless explicitly disabled */
-    if (!((getenv("OPENSSL_DEBUG_MEMORY") != NULL)
-          && (0 == strcmp(getenv("OPENSSL_DEBUG_MEMORY"), "off")))) {
-        CRYPTO_malloc_debug_init();
-        CRYPTO_set_mem_debug_options(V_CRYPTO_MDEBUG_ALL);
-    } else {
-        /* OPENSSL_DEBUG_MEMORY=off */
-        CRYPTO_set_mem_debug_functions(0, 0, 0, 0, 0);
-    }
+    p = getenv("OPENSSL_DEBUG_MEMORY");
+    if (p != NULL && strcmp(p, "on") == 0)
+        CRYPTO_set_mem_debug(1);
     CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
-    ERR_load_crypto_strings();
 
     RAND_seed(rnd_seed, sizeof rnd_seed); /* or BN_generate_prime may fail */
 
@@ -1663,13 +1679,10 @@ int main(int argc, char *argv[])
     /* test the internal curves */
     internal_curve_test();
 
-# ifndef OPENSSL_NO_ENGINE
-    ENGINE_cleanup();
-# endif
-    CRYPTO_cleanup_all_ex_data();
-    ERR_free_strings();
-    ERR_remove_thread_state(NULL);
-    CRYPTO_mem_leaks_fp(stderr);
+#ifndef OPENSSL_NO_CRYPTO_MDEBUG
+    if (CRYPTO_mem_leaks_fp(stderr) <= 0)
+        return 1;
+#endif
 
     return 0;
 }

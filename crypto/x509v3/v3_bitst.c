@@ -1,4 +1,3 @@
-/* v3_bitst.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,9 +57,10 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
+#include "ext_dat.h"
 
 static BIT_STRING_BITNAME ns_cert_type_table[] = {
     {0, "SSL Client", "client"},
@@ -112,7 +112,7 @@ ASN1_BIT_STRING *v2i_ASN1_BIT_STRING(X509V3_EXT_METHOD *method,
     ASN1_BIT_STRING *bs;
     int i;
     BIT_STRING_BITNAME *bnam;
-    if (!(bs = ASN1_BIT_STRING_new())) {
+    if ((bs = ASN1_BIT_STRING_new()) == NULL) {
         X509V3err(X509V3_F_V2I_ASN1_BIT_STRING, ERR_R_MALLOC_FAILURE);
         return NULL;
     }

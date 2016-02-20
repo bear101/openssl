@@ -1,4 +1,3 @@
-/* crypto/conf/conf.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -77,8 +76,8 @@ typedef struct {
     char *value;
 } CONF_VALUE;
 
-DECLARE_STACK_OF(CONF_VALUE)
-DECLARE_LHASH_OF(CONF_VALUE);
+DEFINE_STACK_OF(CONF_VALUE)
+DEFINE_LHASH_OF(CONF_VALUE);
 
 struct conf_st;
 struct conf_method_st;
@@ -102,8 +101,8 @@ struct conf_method_st {
 typedef struct conf_imodule_st CONF_IMODULE;
 typedef struct conf_module_st CONF_MODULE;
 
-DECLARE_STACK_OF(CONF_MODULE)
-DECLARE_STACK_OF(CONF_IMODULE)
+DEFINE_STACK_OF(CONF_MODULE)
+DEFINE_STACK_OF(CONF_IMODULE)
 
 /* DSO module function typedefs */
 typedef int conf_init_func (CONF_IMODULE *md, const CONF *cnf);
@@ -133,11 +132,17 @@ char *CONF_get_string(LHASH_OF(CONF_VALUE) *conf, const char *group,
 long CONF_get_number(LHASH_OF(CONF_VALUE) *conf, const char *group,
                      const char *name);
 void CONF_free(LHASH_OF(CONF_VALUE) *conf);
+#ifndef OPENSSL_NO_STDIO
 int CONF_dump_fp(LHASH_OF(CONF_VALUE) *conf, FILE *out);
+#endif
 int CONF_dump_bio(LHASH_OF(CONF_VALUE) *conf, BIO *out);
 
-void OPENSSL_config(const char *config_name);
-void OPENSSL_no_config(void);
+DEPRECATEDIN_1_1_0(void OPENSSL_config(const char *config_name))
+
+#if OPENSSL_API_COMPAT < 0x10100000L
+# define OPENSSL_no_config() \
+    OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL)
+#endif
 
 /*
  * New conf code.  The semantics are different from the functions above. If
@@ -166,7 +171,9 @@ STACK_OF(CONF_VALUE) *NCONF_get_section(const CONF *conf,
 char *NCONF_get_string(const CONF *conf, const char *group, const char *name);
 int NCONF_get_number_e(const CONF *conf, const char *group, const char *name,
                        long *result);
+#ifndef OPENSSL_NO_STDIO
 int NCONF_dump_fp(const CONF *conf, FILE *out);
+#endif
 int NCONF_dump_bio(const CONF *conf, BIO *out);
 
 #define NCONF_get_number(c,g,n,r) NCONF_get_number_e(c,g,n,r)

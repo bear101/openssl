@@ -1,4 +1,3 @@
-/* crypto/mem_clr.c -*- mode:C; c-file-style: "eay" -*- */
 /*
  * Written by Geoff Thorpe (geoff@geoffthorpe.net) for the OpenSSL project
  * 2002.
@@ -60,12 +59,17 @@
 #include <string.h>
 #include <openssl/crypto.h>
 
+extern unsigned char cleanse_ctr;
 unsigned char cleanse_ctr = 0;
 
 void OPENSSL_cleanse(void *ptr, size_t len)
 {
     unsigned char *p = ptr;
     size_t loop = len, ctr = cleanse_ctr;
+
+    if (ptr == NULL)
+        return;
+
     while (loop--) {
         *(p++) = (unsigned char)ctr;
         ctr += (17 + ((size_t)p & 0xF));

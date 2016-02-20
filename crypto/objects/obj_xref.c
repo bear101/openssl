@@ -1,4 +1,3 @@
-/* crypto/objects/obj_xref.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2006.
@@ -60,8 +59,6 @@
 #include <openssl/objects.h>
 #include "obj_xref.h"
 #include "e_os.h"
-
-DECLARE_STACK_OF(nid_triple)
 
 static STACK_OF(nid_triple) *sig_app, *sigx_app;
 
@@ -147,16 +144,16 @@ int OBJ_find_sigid_by_algs(int *psignid, int dig_nid, int pkey_nid)
 int OBJ_add_sigid(int signid, int dig_id, int pkey_id)
 {
     nid_triple *ntr;
-    if (!sig_app)
+    if (sig_app == NULL)
         sig_app = sk_nid_triple_new(sig_sk_cmp);
-    if (!sig_app)
+    if (sig_app == NULL)
         return 0;
-    if (!sigx_app)
+    if (sigx_app == NULL)
         sigx_app = sk_nid_triple_new(sigx_cmp);
-    if (!sigx_app)
+    if (sigx_app == NULL)
         return 0;
     ntr = OPENSSL_malloc(sizeof(*ntr));
-    if (!ntr)
+    if (ntr == NULL)
         return 0;
     ntr->sign_id = signid;
     ntr->hash_id = dig_id;

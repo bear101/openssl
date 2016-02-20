@@ -74,7 +74,7 @@ typedef enum OPTION_choice {
 OPTIONS sess_id_options[] = {
     {"help", OPT_HELP, '-', "Display this summary"},
     {"inform", OPT_INFORM, 'F', "Input format - default PEM (DER or PEM)"},
-    {"outform", OPT_OUTFORM, 'F',
+    {"outform", OPT_OUTFORM, 'f',
      "Output format - default PEM (PEM, DER or NSS)"},
     {"in", OPT_IN, 's', "Input file - default stdin"},
     {"out", OPT_OUT, 's', "Output file - default stdout"},
@@ -114,7 +114,8 @@ int sess_id_main(int argc, char **argv)
                 goto opthelp;
             break;
         case OPT_OUTFORM:
-            if (!opt_format(opt_arg(), OPT_FMT_PEMDER, &outformat))
+            if (!opt_format(opt_arg(), OPT_FMT_PEMDER | OPT_FMT_NSS,
+                            &outformat))
                 goto opthelp;
             break;
         case OPT_IN:
@@ -138,7 +139,8 @@ int sess_id_main(int argc, char **argv)
         }
     }
     argc = opt_num_rest();
-    argv = opt_rest();
+    if (argc != 0)
+        goto opthelp;
 
     x = load_sess_id(infile, informat);
     if (x == NULL) {
@@ -160,10 +162,7 @@ int sess_id_main(int argc, char **argv)
     }
 
     if (!noout || text) {
-        const char* modeflag = "w";
-        if (outformat == FORMAT_ASN1 || outformat == FORMAT_NSS)
-            modeflag = "wb";
-        out = bio_open_default(outfile, modeflag);
+        out = bio_open_default(outfile, 'w', outformat);
         if (out == NULL)
             goto end;
     }
@@ -220,7 +219,7 @@ static SSL_SESSION *load_sess_id(char *infile, int format)
     SSL_SESSION *x = NULL;
     BIO *in = NULL;
 
-    in = bio_open_default(infile, RB(format));
+    in = bio_open_default(infile, 'r', format);
     if (in == NULL)
         goto end;
     if (format == FORMAT_ASN1)

@@ -1,4 +1,3 @@
-/* pcy_data.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2004.
@@ -57,7 +56,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
@@ -98,11 +97,11 @@ X509_POLICY_DATA *policy_data_new(POLICYINFO *policy,
             return NULL;
     } else
         id = NULL;
-    ret = OPENSSL_malloc(sizeof(*ret));
-    if (!ret)
+    ret = OPENSSL_zalloc(sizeof(*ret));
+    if (ret == NULL)
         return NULL;
     ret->expected_policy_set = sk_ASN1_OBJECT_new_null();
-    if (!ret->expected_policy_set) {
+    if (ret->expected_policy_set == NULL) {
         OPENSSL_free(ret);
         ASN1_OBJECT_free(id);
         return NULL;
@@ -110,8 +109,6 @@ X509_POLICY_DATA *policy_data_new(POLICYINFO *policy,
 
     if (crit)
         ret->flags = POLICY_DATA_FLAG_CRITICAL;
-    else
-        ret->flags = 0;
 
     if (id)
         ret->valid_policy = id;
@@ -123,8 +120,7 @@ X509_POLICY_DATA *policy_data_new(POLICYINFO *policy,
     if (policy) {
         ret->qualifier_set = policy->qualifiers;
         policy->qualifiers = NULL;
-    } else
-        ret->qualifier_set = NULL;
+    }
 
     return ret;
 }

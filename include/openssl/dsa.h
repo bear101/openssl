@@ -1,4 +1,3 @@
-/* crypto/dsa/dsa.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,9 +57,8 @@
 
 /*
  * The DSS routines are based on patches supplied by
- * Steven Schoch <schoch@sheba.arc.nasa.gov>.  He basically did the
- * work and I have just tweaked them a little to fit into my
- * stylistic vision for SSLeay :-) */
+ * Steven Schoch <schoch@sheba.arc.nasa.gov>.
+ */
 
 #ifndef HEADER_DSA_H
 # define HEADER_DSA_H
@@ -74,8 +72,9 @@
 # include <openssl/bio.h>
 # include <openssl/crypto.h>
 # include <openssl/ossl_typ.h>
+# include <openssl/opensslconf.h>
 
-# ifdef OPENSSL_USE_DEPRECATED
+# if OPENSSL_API_COMPAT < 0x10100000L
 #  include <openssl/bn.h>
 #  ifndef OPENSSL_NO_DH
 #   include <openssl/dh.h>
@@ -213,8 +212,8 @@ int DSA_sign(int type, const unsigned char *dgst, int dlen,
              unsigned char *sig, unsigned int *siglen, DSA *dsa);
 int DSA_verify(int type, const unsigned char *dgst, int dgst_len,
                const unsigned char *sigbuf, int siglen, DSA *dsa);
-int DSA_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
-                         CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
+#define DSA_get_ex_new_index(l, p, newf, dupf, freef) \
+    CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_DSA, l, p, newf, dupf, freef)
 int DSA_set_ex_data(DSA *d, int idx, void *arg);
 void *DSA_get_ex_data(DSA *d, int idx);
 
@@ -223,16 +222,14 @@ DSA *d2i_DSAPrivateKey(DSA **a, const unsigned char **pp, long length);
 DSA *d2i_DSAparams(DSA **a, const unsigned char **pp, long length);
 
 /* Deprecated version */
-# ifdef OPENSSL_USE_DEPRECATED
-DECLARE_DEPRECATED(DSA *DSA_generate_parameters(int bits,
+DEPRECATEDIN_0_9_8(DSA *DSA_generate_parameters(int bits,
                                                 unsigned char *seed,
                                                 int seed_len,
                                                 int *counter_ret,
                                                 unsigned long *h_ret, void
                                                  (*callback) (int, int,
                                                               void *),
-                                                void *cb_arg));
-# endif                         /* defined(OPENSSL_USE_DEPRECATED) */
+                                                void *cb_arg))
 
 /* New version */
 int DSA_generate_parameters_ex(DSA *dsa, int bits,

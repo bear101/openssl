@@ -175,16 +175,11 @@ $code=<<___;
 #endif
 
 .text
-#if __ARM_ARCH__<7
-.code	32
-#else
+#if defined(__thumb2__)
 .syntax unified
-# if defined(__thumb2__) && !defined(__APPLE__)
-#  define adrl adr
 .thumb
-# else
+#else
 .code   32
-# endif
 #endif
 
 .type	K256,%object
@@ -218,10 +213,10 @@ K256:
 .type	sha256_block_data_order,%function
 sha256_block_data_order:
 .Lsha256_block_data_order:
-#if __ARM_ARCH__<7
+#if __ARM_ARCH__<7 && !defined(__thumb2__)
 	sub	r3,pc,#8		@ sha256_block_data_order
 #else
-	adr	r3,sha256_block_data_order
+	adr	r3,.Lsha256_block_data_order
 #endif
 #if __ARM_MAX_ARCH__>=7 && !defined(__KERNEL__)
 	ldr	r12,.LOPENSSL_armcap
@@ -473,7 +468,8 @@ $code.=<<___;
 
 .global	sha256_block_data_order_neon
 .type	sha256_block_data_order_neon,%function
-.align	4
+.align	5
+.skip	16
 sha256_block_data_order_neon:
 .LNEON:
 	stmdb	sp!,{r4-r12,lr}
@@ -599,7 +595,7 @@ my $Ktbl="r3";
 $code.=<<___;
 #if __ARM_MAX_ARCH__>=7 && !defined(__KERNEL__)
 
-# if defined(__thumb2__) && !defined(__APPLE__)
+# if defined(__thumb2__)
 #  define INST(a,b,c,d)	.byte	c,d|0xc,a,b
 # else
 #  define INST(a,b,c,d)	.byte	a,b,c,d
@@ -610,16 +606,11 @@ $code.=<<___;
 sha256_block_data_order_armv8:
 .LARMv8:
 	vld1.32	{$ABCD,$EFGH},[$ctx]
-# ifdef	__APPLE__
 	sub	$Ktbl,$Ktbl,#256+32
-# elif	defined(__thumb2__)
-	adr	$Ktbl,.LARMv8
-	sub	$Ktbl,$Ktbl,#.LARMv8-K256
-# else
-	adrl	$Ktbl,K256
-# endif
 	add	$len,$inp,$len,lsl#6	@ len to point at the end of inp
+	b	.Loop_v8
 
+.align	4
 .Loop_v8:
 	vld1.8		{@MSG[0]-@MSG[1]},[$inp]!
 	vld1.8		{@MSG[2]-@MSG[3]},[$inp]!

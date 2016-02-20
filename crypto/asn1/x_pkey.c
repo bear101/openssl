@@ -1,4 +1,3 @@
-/* crypto/asn1/x_pkey.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +56,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/x509.h>
@@ -66,23 +65,16 @@ X509_PKEY *X509_PKEY_new(void)
 {
     X509_PKEY *ret = NULL;
 
-    ret = OPENSSL_malloc(sizeof(*ret));
-    if (!ret)
+    ret = OPENSSL_zalloc(sizeof(*ret));
+    if (ret == NULL)
         goto err;
-    memset(ret, 0, sizeof(*ret));
 
-    ret->version = 0;
+    ret->references = 1;
     ret->enc_algor = X509_ALGOR_new();
     ret->enc_pkey = ASN1_OCTET_STRING_new();
-    if (!ret->enc_algor || !ret->enc_pkey)
+    if (ret->enc_algor == NULL || ret->enc_pkey == NULL)
         goto err;
-    ret->dec_pkey = NULL;
-    ret->key_length = 0;
-    ret->key_data = NULL;
-    ret->key_free = 0;
-    ret->cipher.cipher = NULL;
-    memset(ret->cipher.iv, 0, EVP_MAX_IV_LENGTH);
-    ret->references = 1;
+
     return ret;
 err:
     X509_PKEY_free(ret);
@@ -98,17 +90,10 @@ void X509_PKEY_free(X509_PKEY *x)
         return;
 
     i = CRYPTO_add(&x->references, -1, CRYPTO_LOCK_X509_PKEY);
-#ifdef REF_PRINT
-    REF_PRINT("X509_PKEY", x);
-#endif
+    REF_PRINT_COUNT("X509_PKEY", x);
     if (i > 0)
         return;
-#ifdef REF_CHECK
-    if (i < 0) {
-        fprintf(stderr, "X509_PKEY_free, bad reference count\n");
-        abort();
-    }
-#endif
+    REF_ASSERT_ISNT(i < 0);
 
     X509_ALGOR_free(x->enc_algor);
     ASN1_OCTET_STRING_free(x->enc_pkey);

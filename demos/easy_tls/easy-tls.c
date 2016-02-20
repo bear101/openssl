@@ -1,4 +1,4 @@
-/* -*- Mode: C; c-file-style: "bsd" -*- */
+/* */
 /*-
  * easy-tls.c -- generic TLS proxy.
  * $Id: easy-tls.c,v 1.4 2002/03/05 09:07:16 bodo Exp $
@@ -418,7 +418,7 @@ static int tls_init(void *apparg)
         return 0;
 
     SSL_load_error_strings();
-    if (!SSL_library_init() /* aka SSLeay_add_ssl_algorithms() */ ) {
+    if (!SSL_library_init()) {
         tls_errprintf(1, apparg, "SSL_library_init failed.\n");
         return -1;
     }
@@ -651,7 +651,6 @@ struct tls_create_ctx_args tls_create_ctx_defaultargs(void)
     ret.ca_file = NULL;
     ret.verify_depth = -1;
     ret.fail_unless_verified = 0;
-    ret.export_p = 0;
 
     return ret;
 }
@@ -667,8 +666,8 @@ SSL_CTX *tls_create_ctx(struct tls_create_ctx_args a, void *apparg)
         return NULL;
 
     ret =
-        SSL_CTX_new((a.client_p ? SSLv23_client_method :
-                     SSLv23_server_method) ());
+        SSL_CTX_new((a.client_p ? TLS_client_method :
+                     TLS_server_method) ());
 
     if (ret == NULL)
         goto err;
@@ -781,20 +780,6 @@ SSL_CTX *tls_create_ctx(struct tls_create_ctx_args a, void *apparg)
         /* avoid small subgroup attacks: */
         SSL_CTX_set_options(ret, SSL_OP_SINGLE_DH_USE);
     }
-#ifndef NO_RSA
-    if (!a.client_p && a.export_p) {
-        RSA *tmpkey;
-
-        tmpkey = RSA_generate_key(512, RSA_F4, 0, NULL);
-        if (tmpkey == NULL)
-            goto err;
-        if (!SSL_CTX_set_tmp_rsa(ret, tmpkey)) {
-            RSA_free(tmpkey);
-            goto err;
-        }
-        RSA_free(tmpkey);       /* SSL_CTX_set_tmp_rsa uses a duplicate. */
-    }
-#endif
 
     return ret;
 
@@ -1020,7 +1005,7 @@ tls_proxy(int clear_fd, int tls_fd, int info_fd, SSL_CTX *ctx, int client_p)
         int clear_read_select = 0, clear_write_select = 0,
             tls_read_select = 0, tls_write_select = 0, progress = 0;
         int r;
-        unsigned long num_read = BIO_number_read(rbio),
+        uint64_t num_read = BIO_number_read(rbio),
             num_written = BIO_number_written(wbio);
 
         DEBUG_MSG2("loop iteration", ++tls_loop_count);

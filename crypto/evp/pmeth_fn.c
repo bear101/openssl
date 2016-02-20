@@ -1,4 +1,3 @@
-/* pmeth_fn.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2006.
@@ -59,7 +58,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/evp.h>
 #include "internal/evp_int.h"

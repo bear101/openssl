@@ -1,4 +1,3 @@
-/* crypto/bio/bio_cb.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -59,7 +58,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
 

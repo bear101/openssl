@@ -1,4 +1,3 @@
-/* ssl/t1_ext.c */
 /* ====================================================================
  * Copyright (c) 2014 The OpenSSL Project.  All rights reserved.
  *
@@ -57,7 +56,6 @@
 
 #include "ssl_locl.h"
 
-#ifndef OPENSSL_NO_TLSEXT
 
 /* Find a custom extension from the list. */
 static custom_ext_method *custom_ext_find(custom_ext_methods *exts,
@@ -184,7 +182,7 @@ int custom_exts_copy(custom_ext_methods *dst, const custom_ext_methods *src)
 {
     if (src->meths_count) {
         dst->meths =
-            BUF_memdup(src->meths,
+            OPENSSL_memdup(src->meths,
                        sizeof(custom_ext_method) * src->meths_count);
         if (dst->meths == NULL)
             return 0;
@@ -283,12 +281,11 @@ int SSL_extension_supported(unsigned int ext_type)
     case TLSEXT_TYPE_srp:
     case TLSEXT_TYPE_status_request:
     case TLSEXT_TYPE_use_srtp:
-# ifdef TLSEXT_TYPE_encrypt_then_mac
+#ifdef TLSEXT_TYPE_encrypt_then_mac
     case TLSEXT_TYPE_encrypt_then_mac:
-# endif
+#endif
         return 1;
     default:
         return 0;
     }
 }
-#endif

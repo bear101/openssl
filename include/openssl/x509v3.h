@@ -1,4 +1,3 @@
-/* x509v3.h */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -145,7 +144,7 @@ struct v3_ext_ctx {
 
 typedef struct v3_ext_method X509V3_EXT_METHOD;
 
-DECLARE_STACK_OF(X509V3_EXT_METHOD)
+DEFINE_STACK_OF(X509V3_EXT_METHOD)
 
 /* ext_flags values */
 # define X509V3_EXT_DYNAMIC      0x1
@@ -206,8 +205,6 @@ typedef struct GENERAL_NAME_st {
     } d;
 } GENERAL_NAME;
 
-typedef STACK_OF(GENERAL_NAME) GENERAL_NAMES;
-
 typedef struct ACCESS_DESCRIPTION_st {
     ASN1_OBJECT *method;
     GENERAL_NAME *location;
@@ -217,9 +214,13 @@ typedef STACK_OF(ACCESS_DESCRIPTION) AUTHORITY_INFO_ACCESS;
 
 typedef STACK_OF(ASN1_OBJECT) EXTENDED_KEY_USAGE;
 
-DECLARE_STACK_OF(GENERAL_NAME)
+typedef STACK_OF(ASN1_INTEGER) TLS_FEATURE;
 
-DECLARE_STACK_OF(ACCESS_DESCRIPTION)
+DEFINE_STACK_OF(GENERAL_NAME)
+typedef STACK_OF(GENERAL_NAME) GENERAL_NAMES;
+DEFINE_STACK_OF(GENERAL_NAMES)
+
+DEFINE_STACK_OF(ACCESS_DESCRIPTION)
 
 typedef struct DIST_POINT_NAME_st {
     int type;
@@ -254,7 +255,7 @@ struct DIST_POINT_st {
 
 typedef STACK_OF(DIST_POINT) CRL_DIST_POINTS;
 
-DECLARE_STACK_OF(DIST_POINT)
+DEFINE_STACK_OF(DIST_POINT)
 
 struct AUTHORITY_KEYID_st {
     ASN1_OCTET_STRING *keyid;
@@ -269,7 +270,7 @@ typedef struct SXNET_ID_st {
     ASN1_OCTET_STRING *user;
 } SXNETID;
 
-DECLARE_STACK_OF(SXNETID)
+DEFINE_STACK_OF(SXNETID)
 
 typedef struct SXNET_st {
     ASN1_INTEGER *version;
@@ -295,7 +296,7 @@ typedef struct POLICYQUALINFO_st {
     } d;
 } POLICYQUALINFO;
 
-DECLARE_STACK_OF(POLICYQUALINFO)
+DEFINE_STACK_OF(POLICYQUALINFO)
 
 typedef struct POLICYINFO_st {
     ASN1_OBJECT *policyid;
@@ -304,14 +305,14 @@ typedef struct POLICYINFO_st {
 
 typedef STACK_OF(POLICYINFO) CERTIFICATEPOLICIES;
 
-DECLARE_STACK_OF(POLICYINFO)
+DEFINE_STACK_OF(POLICYINFO)
 
 typedef struct POLICY_MAPPING_st {
     ASN1_OBJECT *issuerDomainPolicy;
     ASN1_OBJECT *subjectDomainPolicy;
 } POLICY_MAPPING;
 
-DECLARE_STACK_OF(POLICY_MAPPING)
+DEFINE_STACK_OF(POLICY_MAPPING)
 
 typedef STACK_OF(POLICY_MAPPING) POLICY_MAPPINGS;
 
@@ -321,7 +322,7 @@ typedef struct GENERAL_SUBTREE_st {
     ASN1_INTEGER *maximum;
 } GENERAL_SUBTREE;
 
-DECLARE_STACK_OF(GENERAL_SUBTREE)
+DEFINE_STACK_OF(GENERAL_SUBTREE)
 
 struct NAME_CONSTRAINTS_st {
     STACK_OF(GENERAL_SUBTREE) *permittedSubtrees;
@@ -495,7 +496,7 @@ typedef struct x509_purpose_st {
 # define X509V3_ADD_DELETE               5L
 # define X509V3_ADD_SILENT               0x10
 
-DECLARE_STACK_OF(X509_PURPOSE)
+DEFINE_STACK_OF(X509_PURPOSE)
 
 DECLARE_ASN1_FUNCTIONS(BASIC_CONSTRAINTS)
 
@@ -560,6 +561,8 @@ ASN1_OCTET_STRING *s2i_ASN1_OCTET_STRING(X509V3_EXT_METHOD *method,
 
 DECLARE_ASN1_FUNCTIONS(EXTENDED_KEY_USAGE)
 int i2a_ACCESS_DESCRIPTION(BIO *bp, ACCESS_DESCRIPTION *a);
+
+DECLARE_ASN1_ALLOC_FUNCTIONS(TLS_FEATURE)
 
 DECLARE_ASN1_FUNCTIONS(CERTIFICATEPOLICIES)
 DECLARE_ASN1_FUNCTIONS(POLICYINFO)
@@ -684,8 +687,9 @@ void X509V3_EXT_val_prn(BIO *out, STACK_OF(CONF_VALUE) *val, int indent,
                         int ml);
 int X509V3_EXT_print(BIO *out, X509_EXTENSION *ext, unsigned long flag,
                      int indent);
+#ifndef OPENSSL_NO_STDIO
 int X509V3_EXT_print_fp(FILE *out, X509_EXTENSION *ext, int flag, int indent);
-
+#endif
 int X509V3_extensions_print(BIO *out, char *title,
                             STACK_OF(X509_EXTENSION) *exts,
                             unsigned long flag, int indent);
@@ -696,6 +700,12 @@ int X509_supported_extension(X509_EXTENSION *ex);
 int X509_PURPOSE_set(int *p, int purpose);
 int X509_check_issued(X509 *issuer, X509 *subject);
 int X509_check_akid(X509 *issuer, AUTHORITY_KEYID *akid);
+
+uint32_t X509_get_extension_flags(X509 *x);
+uint32_t X509_get_key_usage(X509 *x);
+uint32_t X509_get_extended_key_usage(X509 *x);
+const ASN1_OCTET_STRING *X509_get0_subject_key_id(X509 *x);
+
 int X509_PURPOSE_get_count(void);
 X509_PURPOSE *X509_PURPOSE_get0(int idx);
 int X509_PURPOSE_get_by_sname(char *sname);
@@ -749,8 +759,9 @@ int X509V3_NAME_from_section(X509_NAME *nm, STACK_OF(CONF_VALUE) *dn_sk,
                              unsigned long chtype);
 
 void X509_POLICY_NODE_print(BIO *out, X509_POLICY_NODE *node, int indent);
-DECLARE_STACK_OF(X509_POLICY_NODE)
+DEFINE_STACK_OF(X509_POLICY_NODE)
 
+#ifndef OPENSSL_NO_RFC3779
 typedef struct ASRange_st {
     ASN1_INTEGER *min, *max;
 } ASRange;
@@ -767,7 +778,7 @@ typedef struct ASIdOrRange_st {
 } ASIdOrRange;
 
 typedef STACK_OF(ASIdOrRange) ASIdOrRanges;
-DECLARE_STACK_OF(ASIdOrRange)
+DEFINE_STACK_OF(ASIdOrRange)
 
 # define ASIdentifierChoice_inherit              0
 # define ASIdentifierChoice_asIdsOrRanges        1
@@ -805,7 +816,7 @@ typedef struct IPAddressOrRange_st {
 } IPAddressOrRange;
 
 typedef STACK_OF(IPAddressOrRange) IPAddressOrRanges;
-DECLARE_STACK_OF(IPAddressOrRange)
+DEFINE_STACK_OF(IPAddressOrRange)
 
 # define IPAddressChoice_inherit                 0
 # define IPAddressChoice_addressesOrRanges       1
@@ -824,7 +835,7 @@ typedef struct IPAddressFamily_st {
 } IPAddressFamily;
 
 typedef STACK_OF(IPAddressFamily) IPAddrBlocks;
-DECLARE_STACK_OF(IPAddressFamily)
+DEFINE_STACK_OF(IPAddressFamily)
 
 DECLARE_ASN1_FUNCTIONS(IPAddressRange)
 DECLARE_ASN1_FUNCTIONS(IPAddressOrRange)
@@ -893,6 +904,7 @@ int v3_asid_validate_resource_set(STACK_OF(X509) *chain,
 int v3_addr_validate_resource_set(STACK_OF(X509) *chain,
                                   IPAddrBlocks *ext, int allow_inheritance);
 
+#endif                         /* OPENSSL_NO_RFC3779 */
 /* BEGIN ERROR CODES */
 /*
  * The following lines are auto generated by the script mkerr.pl. Any changes
@@ -953,6 +965,7 @@ void ERR_load_X509V3_strings(void);
 # define X509V3_F_V2I_POLICY_CONSTRAINTS                  146
 # define X509V3_F_V2I_POLICY_MAPPINGS                     145
 # define X509V3_F_V2I_SUBJECT_ALT                         154
+# define X509V3_F_V2I_TLS_FEATURE                         165
 # define X509V3_F_V3_ADDR_VALIDATE_PATH_INTERNAL          160
 # define X509V3_F_V3_GENERIC_EXTENSION                    116
 # define X509V3_F_X509V3_ADD1_I2D                         140

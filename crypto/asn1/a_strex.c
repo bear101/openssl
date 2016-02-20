@@ -1,4 +1,3 @@
-/* a_strex.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 2000.
@@ -59,7 +58,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <openssl/asn1.h>
@@ -92,6 +91,7 @@ static int send_bio_chars(void *arg, const void *buf, int len)
     return 1;
 }
 
+#ifndef OPENSSL_NO_STDIO
 static int send_fp_chars(void *arg, const void *buf, int len)
 {
     if (!arg)
@@ -100,6 +100,7 @@ static int send_fp_chars(void *arg, const void *buf, int len)
         return 0;
     return 1;
 }
+#endif
 
 typedef int char_io (void *arg, const void *buf, int len);
 
@@ -303,7 +304,7 @@ static int do_dump(unsigned long lflags, char_io *io_ch, void *arg,
     t.value.ptr = (char *)str;
     der_len = i2d_ASN1_TYPE(&t, NULL);
     der_buf = OPENSSL_malloc(der_len);
-    if (!der_buf)
+    if (der_buf == NULL)
         return -1;
     p = der_buf;
     i2d_ASN1_TYPE(&t, &p);

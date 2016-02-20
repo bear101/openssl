@@ -1,4 +1,3 @@
-/* v3_ocsp.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,12 +57,13 @@
  */
 
 # include <stdio.h>
-# include "cryptlib.h"
+# include "internal/cryptlib.h"
 # include <openssl/conf.h>
 # include <openssl/asn1.h>
 # include <openssl/ocsp.h>
 # include "ocsp_lcl.h"
 # include <openssl/x509v3.h>
+# include "../x509v3/ext_dat.h"
 
 /*
  * OCSP extensions and a couple of CRL entry extensions
@@ -233,10 +233,13 @@ static void *d2i_ocsp_nonce(void *a, const unsigned char **pp, long length)
 {
     ASN1_OCTET_STRING *os, **pos;
     pos = a;
-    if (!pos || !*pos)
+    if (pos == NULL || *pos == NULL) {
         os = ASN1_OCTET_STRING_new();
-    else
+        if (os == NULL)
+            goto err;
+    } else {
         os = *pos;
+    }
     if (!ASN1_OCTET_STRING_set(os, *pp, length))
         goto err;
 

@@ -90,7 +90,8 @@ typedef enum OPTION_choice {
     OPT_TO, OPT_FROM, OPT_SUBJECT, OPT_SIGNER, OPT_RECIP, OPT_MD,
     OPT_CIPHER, OPT_INKEY, OPT_KEYFORM, OPT_CERTFILE, OPT_CAFILE,
     OPT_V_ENUM,
-    OPT_CAPATH, OPT_IN, OPT_INFORM, OPT_OUT, OPT_OUTFORM, OPT_CONTENT
+    OPT_CAPATH, OPT_NOCAFILE, OPT_NOCAPATH, OPT_IN, OPT_INFORM, OPT_OUT,
+    OPT_OUTFORM, OPT_CONTENT
 } OPTION_CHOICE;
 
 OPTIONS smime_options[] = {
@@ -132,6 +133,10 @@ OPTIONS smime_options[] = {
     {"text", OPT_TEXT, '-', "Include or delete text MIME headers"},
     {"CApath", OPT_CAPATH, '/', "Trusted certificates directory"},
     {"CAfile", OPT_CAFILE, '<', "Trusted certificates file"},
+    {"no-CAfile", OPT_NOCAFILE, '-',
+     "Do not load the default certificates file"},
+    {"no-CApath", OPT_NOCAPATH, '-',
+     "Do not load certificates from the default certificates directory"},
     {"resign", OPT_RESIGN, '-'},
     {"nochain", OPT_NOCHAIN, '-'},
     {"nosmimecap", OPT_NOSMIMECAP, '-'},
@@ -170,8 +175,8 @@ int smime_main(int argc, char **argv)
         NULL;
     char *passinarg = NULL, *passin = NULL, *to = NULL, *from =
         NULL, *subject = NULL;
-    const char *inmode = "r", *outmode = "w";
     OPTION_CHOICE o;
+    int noCApath = 0, noCAfile = 0;
     int flags = PKCS7_DETACHED, operation = 0, ret = 0, need_rand = 0, indef =
         0;
     int informat = FORMAT_SMIME, outformat = FORMAT_SMIME, keyform =
@@ -349,6 +354,12 @@ int smime_main(int argc, char **argv)
         case OPT_CAPATH:
             CApath = opt_arg();
             break;
+        case OPT_NOCAFILE:
+            noCAfile = 1;
+            break;
+        case OPT_NOCAPATH:
+            noCApath = 1;
+            break;
         case OPT_CONTENT:
             contfile = opt_arg();
             break;
@@ -423,20 +434,14 @@ int smime_main(int argc, char **argv)
     if (!(operation & SMIME_SIGNERS))
         flags &= ~PKCS7_DETACHED;
 
-    if (operation & SMIME_OP) {
-        if (outformat == FORMAT_ASN1)
-            outmode = "wb";
-    } else {
+    if (!(operation & SMIME_OP)) {
         if (flags & PKCS7_BINARY)
-            outmode = "wb";
+            outformat = FORMAT_BINARY;
     }
 
-    if (operation & SMIME_IP) {
-        if (informat == FORMAT_ASN1)
-            inmode = "rb";
-    } else {
+    if (!(operation & SMIME_IP)) {
         if (flags & PKCS7_BINARY)
-            inmode = "rb";
+            informat = FORMAT_BINARY;
     }
 
     if (operation == SMIME_ENCRYPT) {
@@ -463,16 +468,16 @@ int smime_main(int argc, char **argv)
     }
 
     if (certfile) {
-        if (!(other = load_certs(certfile, FORMAT_PEM, NULL,
-                                 e, "certificate file"))) {
+        if (!load_certs(certfile, &other, FORMAT_PEM, NULL, e,
+                        "certificate file")) {
             ERR_print_errors(bio_err);
             goto end;
         }
     }
 
     if (recipfile && (operation == SMIME_DECRYPT)) {
-        if (!(recip = load_cert(recipfile, FORMAT_PEM, NULL,
-                                e, "recipient certificate file"))) {
+        if ((recip = load_cert(recipfile, FORMAT_PEM, NULL,
+                                e, "recipient certificate file")) == NULL) {
             ERR_print_errors(bio_err);
             goto end;
         }
@@ -493,7 +498,7 @@ int smime_main(int argc, char **argv)
             goto end;
     }
 
-    in = bio_open_default(infile, inmode);
+    in = bio_open_default(infile, 'r', informat);
     if (in == NULL)
         goto end;
 
@@ -515,19 +520,19 @@ int smime_main(int argc, char **argv)
         }
         if (contfile) {
             BIO_free(indata);
-            if (!(indata = BIO_new_file(contfile, "rb"))) {
+            if ((indata = BIO_new_file(contfile, "rb")) == NULL) {
                 BIO_printf(bio_err, "Can't read content file %s\n", contfile);
                 goto end;
             }
         }
     }
 
-    out = bio_open_default(outfile, outmode);
+    out = bio_open_default(outfile, 'w', outformat);
     if (out == NULL)
         goto end;
 
     if (operation == SMIME_VERIFY) {
-        if (!(store = setup_verify(CAfile, CApath)))
+        if ((store = setup_verify(CAfile, CApath, noCAfile, noCApath)) == NULL)
             goto end;
         X509_STORE_set_verify_cb(store, smime_cb);
         if (vpmtouched)

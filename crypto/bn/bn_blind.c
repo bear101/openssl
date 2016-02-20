@@ -1,4 +1,3 @@
-/* crypto/bn/bn_blind.c */
 /* ====================================================================
  * Copyright (c) 1998-2006 The OpenSSL Project.  All rights reserved.
  *
@@ -109,7 +108,8 @@
  * [including the GNU Public Licence.]
  */
 
-#include "cryptlib.h"
+#include <openssl/opensslconf.h>
+#include "internal/cryptlib.h"
 #include "bn_lcl.h"
 
 #define BN_BLINDING_COUNTER     32
@@ -119,7 +119,7 @@ struct bn_blinding_st {
     BIGNUM *Ai;
     BIGNUM *e;
     BIGNUM *mod;                /* just a reference */
-#ifndef OPENSSL_NO_DEPRECATED
+#if OPENSSL_API_COMPAT < 0x10000000L
     unsigned long thread_id;    /* added in OpenSSL 0.9.6j and 0.9.7b; used
                                  * only by crypto/rsa/rsa_eay.c, rsa_lib.c */
 #endif
@@ -137,11 +137,10 @@ BN_BLINDING *BN_BLINDING_new(const BIGNUM *A, const BIGNUM *Ai, BIGNUM *mod)
 
     bn_check_top(mod);
 
-    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL) {
+    if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL) {
         BNerr(BN_F_BN_BLINDING_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    memset(ret, 0, sizeof(*ret));
     if (A != NULL) {
         if ((ret->A = BN_dup(A)) == NULL)
             goto err;
@@ -272,7 +271,7 @@ int BN_BLINDING_invert_ex(BIGNUM *n, const BIGNUM *r, BN_BLINDING *b,
     return (ret);
 }
 
-#ifndef OPENSSL_NO_DEPRECATED
+#if OPENSSL_API_COMPAT < 0x10000000L
 unsigned long BN_BLINDING_get_thread_id(const BN_BLINDING *b)
 {
     return b->thread_id;

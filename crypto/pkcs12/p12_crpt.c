@@ -1,4 +1,3 @@
-/* p12_crpt.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/pkcs12.h>
 
 /* PKCS#12 PBE algorithms now in static table */
@@ -75,6 +74,9 @@ int PKCS12_PBE_keyivgen(EVP_CIPHER_CTX *ctx, const char *pass, int passlen,
     int saltlen, iter, ret;
     unsigned char *salt;
     unsigned char key[EVP_MAX_KEY_LENGTH], iv[EVP_MAX_IV_LENGTH];
+
+    if (cipher == NULL)
+        return 0;
 
     /* Extract useful info from parameter */
 

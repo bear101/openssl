@@ -1,4 +1,3 @@
-/* v3_crld.c */
 /*
  * Written by Dr Stephen N Henson (steve@openssl.org) for the OpenSSL project
  * 1999.
@@ -58,13 +57,14 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 #include <openssl/x509v3.h>
 
 #include "internal/x509_int.h"
+#include "ext_dat.h"
 
 static void *v2i_crld(const X509V3_EXT_METHOD *method,
                       X509V3_CTX *ctx, STACK_OF(CONF_VALUE) *nval);
@@ -127,7 +127,7 @@ static int set_dist_point_name(DIST_POINT_NAME **pdp, X509V3_CTX *ctx,
         STACK_OF(CONF_VALUE) *dnsect;
         X509_NAME *nm;
         nm = X509_NAME_new();
-        if (!nm)
+        if (nm == NULL)
             return -1;
         dnsect = X509V3_get_section(ctx, cnf->value);
         if (!dnsect) {
@@ -161,7 +161,7 @@ static int set_dist_point_name(DIST_POINT_NAME **pdp, X509V3_CTX *ctx,
     }
 
     *pdp = DIST_POINT_NAME_new();
-    if (!*pdp)
+    if (*pdp == NULL)
         goto err;
     if (fnm) {
         (*pdp)->type = 0;
@@ -205,9 +205,9 @@ static int set_reasons(ASN1_BIT_STRING **preas, char *value)
         return 0;
     for (i = 0; i < sk_CONF_VALUE_num(rsk); i++) {
         bnam = sk_CONF_VALUE_value(rsk, i)->name;
-        if (!*preas) {
+        if (*preas == NULL) {
             *preas = ASN1_BIT_STRING_new();
-            if (!*preas)
+            if (*preas == NULL)
                 goto err;
         }
         for (pbn = reason_flags; pbn->lname; pbn++) {
@@ -256,7 +256,7 @@ static DIST_POINT *crldp_from_section(X509V3_CTX *ctx,
     CONF_VALUE *cnf;
     DIST_POINT *point = NULL;
     point = DIST_POINT_new();
-    if (!point)
+    if (point == NULL)
         goto err;
     for (i = 0; i < sk_CONF_VALUE_num(nval); i++) {
         int ret;
@@ -291,7 +291,8 @@ static void *v2i_crld(const X509V3_EXT_METHOD *method,
     GENERAL_NAME *gen = NULL;
     CONF_VALUE *cnf;
     int i;
-    if (!(crld = sk_DIST_POINT_new_null()))
+
+    if ((crld = sk_DIST_POINT_new_null()) == NULL)
         goto merr;
     for (i = 0; i < sk_CONF_VALUE_num(nval); i++) {
         DIST_POINT *point;
@@ -310,20 +311,20 @@ static void *v2i_crld(const X509V3_EXT_METHOD *method,
                 goto merr;
             }
         } else {
-            if (!(gen = v2i_GENERAL_NAME(method, ctx, cnf)))
+            if ((gen = v2i_GENERAL_NAME(method, ctx, cnf)) == NULL)
                 goto err;
-            if (!(gens = GENERAL_NAMES_new()))
+            if ((gens = GENERAL_NAMES_new()) == NULL)
                 goto merr;
             if (!sk_GENERAL_NAME_push(gens, gen))
                 goto merr;
             gen = NULL;
-            if (!(point = DIST_POINT_new()))
+            if ((point = DIST_POINT_new()) == NULL)
                 goto merr;
             if (!sk_DIST_POINT_push(crld, point)) {
                 DIST_POINT_free(point);
                 goto merr;
             }
-            if (!(point->distpoint = DIST_POINT_NAME_new()))
+            if ((point->distpoint = DIST_POINT_NAME_new()) == NULL)
                 goto merr;
             point->distpoint->name.fullname = gens;
             point->distpoint->type = 0;
@@ -416,7 +417,7 @@ static void *v2i_idp(const X509V3_EXT_METHOD *method, X509V3_CTX *ctx,
     char *name, *val;
     int i, ret;
     idp = ISSUING_DIST_POINT_new();
-    if (!idp)
+    if (idp == NULL)
         goto merr;
     for (i = 0; i < sk_CONF_VALUE_num(nval); i++) {
         cnf = sk_CONF_VALUE_value(nval, i);

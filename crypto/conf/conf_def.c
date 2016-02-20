@@ -1,4 +1,3 @@
-/* crypto/conf/conf.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -60,7 +59,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/stack.h>
 #include <openssl/lhash.h>
 #include <openssl/conf.h>
@@ -87,8 +86,6 @@ static int def_load_bio(CONF *conf, BIO *bp, long *eline);
 static int def_dump(const CONF *conf, BIO *bp);
 static int def_is_number(const CONF *conf, char c);
 static int def_to_int(const CONF *conf, char c);
-
-const char CONF_def_version[] = "CONF_def" OPENSSL_VERSION_PTEXT;
 
 static CONF_METHOD default_method = {
     "OpenSSL default",
@@ -131,7 +128,7 @@ static CONF *def_create(CONF_METHOD *meth)
     CONF *ret;
 
     ret = OPENSSL_malloc(sizeof(*ret));
-    if (ret)
+    if (ret != NULL)
         if (meth->init(ret) == 0) {
             OPENSSL_free(ret);
             ret = NULL;
@@ -225,12 +222,11 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
         goto err;
     }
 
-    section = OPENSSL_malloc(10);
+    section = OPENSSL_strdup("default");
     if (section == NULL) {
         CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
         goto err;
     }
-    BUF_strlcpy(section, "default", 10);
 
     if (_CONF_new_data(conf) == 0) {
         CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
@@ -357,7 +353,7 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
             p++;
             *p = '\0';
 
-            if (!(v = OPENSSL_malloc(sizeof(*v)))) {
+            if ((v = OPENSSL_malloc(sizeof(*v))) == NULL) {
                 CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
@@ -369,7 +365,7 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
                 CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
-            BUF_strlcpy(v->name, pname, strlen(pname) + 1);
+            OPENSSL_strlcpy(v->name, pname, strlen(pname) + 1);
             if (!str_copy(conf, psection, &(v->value), start))
                 goto err;
 
@@ -655,7 +651,7 @@ static char *scan_dquote(CONF *conf, char *p)
     return (p);
 }
 
-static void dump_value_doall_arg(CONF_VALUE *a, BIO *out)
+static void dump_value_doall_arg(const CONF_VALUE *a, BIO *out)
 {
     if (a->name)
         BIO_printf(out, "[%s] %s=%s\n", a->section, a->name, a->value);
@@ -663,12 +659,11 @@ static void dump_value_doall_arg(CONF_VALUE *a, BIO *out)
         BIO_printf(out, "[[%s]]\n", a->section);
 }
 
-static IMPLEMENT_LHASH_DOALL_ARG_FN(dump_value, CONF_VALUE, BIO)
+IMPLEMENT_LHASH_DOALL_ARG_CONST(CONF_VALUE, BIO);
 
 static int def_dump(const CONF *conf, BIO *out)
 {
-    lh_CONF_VALUE_doall_arg(conf->data, LHASH_DOALL_ARG_FN(dump_value),
-                            BIO, out);
+    lh_CONF_VALUE_doall_BIO(conf->data, dump_value_doall_arg, out);
     return 1;
 }
 

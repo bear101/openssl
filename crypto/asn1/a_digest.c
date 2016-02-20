@@ -1,4 +1,3 @@
-/* crypto/asn1/a_digest.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -59,7 +58,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #ifndef NO_SYS_TYPES_H
 # include <sys/types.h>

@@ -1,4 +1,3 @@
-/* crypto/pkcs7/pk7_lib.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,10 +56,11 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/x509.h>
 #include "internal/asn1_int.h"
+#include "internal/evp_int.h"
 
 long PKCS7_ctrl(PKCS7 *p7, int cmd, long larg, char *parg)
 {
@@ -265,8 +265,8 @@ int PKCS7_add_signer(PKCS7 *p7, PKCS7_SIGNER_INFO *psi)
         }
     }
     if (!j) {                   /* we need to add another algorithm */
-        if (!(alg = X509_ALGOR_new())
-            || !(alg->parameter = ASN1_TYPE_new())) {
+        if ((alg = X509_ALGOR_new()) == NULL
+            || (alg->parameter = ASN1_TYPE_new()) == NULL) {
             X509_ALGOR_free(alg);
             PKCS7err(PKCS7_F_PKCS7_ADD_SIGNER, ERR_R_MALLOC_FAILURE);
             return (0);
@@ -308,7 +308,7 @@ int PKCS7_add_certificate(PKCS7 *p7, X509 *x509)
         PKCS7err(PKCS7_F_PKCS7_ADD_CERTIFICATE, ERR_R_MALLOC_FAILURE);
         return 0;
     }
-    CRYPTO_add(&x509->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(x509);
     if (!sk_X509_push(*sk, x509)) {
         X509_free(x509);
         return 0;
@@ -341,7 +341,7 @@ int PKCS7_add_crl(PKCS7 *p7, X509_CRL *crl)
         return 0;
     }
 
-    CRYPTO_add(&crl->references, 1, CRYPTO_LOCK_X509_CRL);
+    X509_CRL_up_ref(crl);
     if (!sk_X509_CRL_push(*sk, crl)) {
         X509_CRL_free(crl);
         return 0;
@@ -371,7 +371,7 @@ int PKCS7_SIGNER_INFO_set(PKCS7_SIGNER_INFO *p7i, X509 *x509, EVP_PKEY *pkey,
         goto err;
 
     /* lets keep the pkey around for a while */
-    CRYPTO_add(&pkey->references, 1, CRYPTO_LOCK_EVP_PKEY);
+    EVP_PKEY_up_ref(pkey);
     p7i->pkey = pkey;
 
     /* Set the algorithms */
@@ -426,7 +426,7 @@ PKCS7_SIGNER_INFO *PKCS7_add_signature(PKCS7 *p7, X509 *x509, EVP_PKEY *pkey,
 int PKCS7_set_digest(PKCS7 *p7, const EVP_MD *md)
 {
     if (PKCS7_type_is_digest(p7)) {
-        if (!(p7->d.digest->md->parameter = ASN1_TYPE_new())) {
+        if ((p7->d.digest->md->parameter = ASN1_TYPE_new()) == NULL) {
             PKCS7err(PKCS7_F_PKCS7_SET_DIGEST, ERR_R_MALLOC_FAILURE);
             return 0;
         }
@@ -523,7 +523,7 @@ int PKCS7_RECIP_INFO_set(PKCS7_RECIP_INFO *p7i, X509 *x509)
           ASN1_INTEGER_dup(X509_get_serialNumber(x509))))
         return 0;
 
-    pkey = X509_get_pubkey(x509);
+    pkey = X509_get0_pubkey(x509);
 
     if (!pkey || !pkey->ameth || !pkey->ameth->pkey_ctrl) {
         PKCS7err(PKCS7_F_PKCS7_RECIP_INFO_SET,
@@ -543,15 +543,12 @@ int PKCS7_RECIP_INFO_set(PKCS7_RECIP_INFO *p7i, X509 *x509)
         goto err;
     }
 
-    EVP_PKEY_free(pkey);
-
-    CRYPTO_add(&x509->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(x509);
     p7i->cert = x509;
 
     return 1;
 
  err:
-    EVP_PKEY_free(pkey);
     return 0;
 }
 

@@ -60,7 +60,7 @@ typedef enum OPTION_choice {
 OPTIONS prime_options[] = {
     {OPT_HELP_STR, 1, '-', "Usage: %s [options] [number...]\n"},
     {OPT_HELP_STR, 1, '-',
-        "  number Number to check for primarility\n"},
+        "  number Number to check for primality\n"},
     {"help", OPT_HELP, '-', "Display this summary"},
     {"hex", OPT_HEX, '-', "Hex output"},
     {"generate", OPT_GENERATE, '-', "Generate a prime"},
@@ -118,7 +118,7 @@ int prime_main(int argc, char **argv)
         char *s;
 
         if (!bits) {
-            BIO_printf(bio_err, "Specifiy the number of bits.\n");
+            BIO_printf(bio_err, "Specify the number of bits.\n");
             goto end;
         }
         bn = BN_new();

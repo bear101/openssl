@@ -1,4 +1,3 @@
-/* crypto/txt_db/txt_db.h */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -70,13 +69,14 @@
 # define DB_ERROR_INDEX_OUT_OF_RANGE     3
 # define DB_ERROR_NO_INDEX               4
 # define DB_ERROR_INSERT_INDEX_CLASH     5
+# define DB_ERROR_WRONG_NUM_FIELDS       6
 
 #ifdef  __cplusplus
 extern "C" {
 #endif
 
 typedef OPENSSL_STRING *OPENSSL_PSTRING;
-DECLARE_SPECIAL_STACK_OF(OPENSSL_PSTRING, OPENSSL_STRING)
+DEFINE_SPECIAL_STACK_OF(OPENSSL_PSTRING, OPENSSL_STRING)
 
 typedef struct txt_db_st {
     int num_fields;
