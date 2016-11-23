@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2010-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -67,6 +74,7 @@
 # Skylake	0.44(+110%)(if system doesn't support AVX)
 # Bulldozer	1.49(+27%)
 # Silvermont	2.88(+13%)
+# Goldmont	1.08(+24%)
 
 # March 2013
 #
@@ -93,7 +101,7 @@ die "can't locate x86_64-xlate.pl";
 
 if (`$ENV{CC} -Wa,-v -c -o /dev/null -x assembler /dev/null 2>&1`
 		=~ /GNU assembler version ([2-9]\.[0-9]+)/) {
-	$avx = ($1>=2.19) + ($1>=2.22);
+	$avx = ($1>=2.20) + ($1>=2.22);
 }
 
 if (!$avx && $win64 && ($flavour =~ /nasm/ || $ENV{ASM} =~ /nasm/) &&
@@ -110,7 +118,7 @@ if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
+open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\"";
 *STDOUT=*OUT;
 
 $do4xaggr=1;
@@ -461,7 +469,7 @@ $code.=<<___;
 	psllq		\$57,$Xi		#
 	movdqa		$Xi,$T1			#
 	pslldq		\$8,$Xi
-	psrldq		\$8,$T1			#	
+	psrldq		\$8,$T1			#
 	pxor		$T2,$Xi
 	pxor		$T1,$Xhi		#
 
@@ -575,7 +583,7 @@ ___
 	&clmul64x64_T2	($Xhi,$Xi,$Hkey,$T2);
 $code.=<<___ if (0 || (&reduction_alg9($Xhi,$Xi)&&0));
 	# experimental alternative. special thing about is that there
-	# no dependency between the two multiplications... 
+	# no dependency between the two multiplications...
 	mov		\$`0xE1<<1`,%eax
 	mov		\$0xA040608020C0E000,%r10	# ((7..0)·0xE0)&0xff
 	mov		\$0x07,%r11d
@@ -750,7 +758,7 @@ $code.=<<___;
 	movdqa		$T2,$T1			#
 	pslldq		\$8,$T2
 	 pclmulqdq	\$0x00,$Hkey2,$Xln
-	psrldq		\$8,$T1			#	
+	psrldq		\$8,$T1			#
 	pxor		$T2,$Xi
 	pxor		$T1,$Xhi		#
 	movdqu		0($inp),$T1
@@ -886,7 +894,7 @@ $code.=<<___;
 	  psllq		\$57,$Xi		#
 	  movdqa	$Xi,$T1			#
 	  pslldq	\$8,$Xi
-	  psrldq	\$8,$T1			#	
+	  psrldq	\$8,$T1			#
 	  pxor		$T2,$Xi
 	pshufd		\$0b01001110,$Xhn,$Xmn
 	  pxor		$T1,$Xhi		#

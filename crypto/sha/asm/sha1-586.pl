@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 1998-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 
 # ====================================================================
 # [Re]written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -113,6 +120,9 @@ $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 push(@INC,"${dir}","${dir}../../perlasm");
 require "x86asm.pl";
 
+$output=pop;
+open STDOUT,">$output";
+
 &asm_init($ARGV[0],"sha1-586.pl",$ARGV[$#ARGV] eq "386");
 
 $xmm=$ymm=0;
@@ -123,7 +133,7 @@ $ymm=1 if ($xmm &&
 			=~ /GNU assembler version ([2-9]\.[0-9]+)/ &&
 		$1>=2.19);	# first version supporting AVX
 
-$ymm=1 if ($xmm && !$ymm && $ARGV[0] eq "win32n" && 
+$ymm=1 if ($xmm && !$ymm && $ARGV[0] eq "win32n" &&
 		`nasm -v 2>&1` =~ /NASM version ([2-9]\.[0-9]+)/ &&
 		$1>=2.03);	# first version supporting AVX
 
@@ -1474,3 +1484,5 @@ sub Xtail_avx()
 &asciz("SHA1 block transform for x86, CRYPTOGAMS by <appro\@openssl.org>");
 
 &asm_finish();
+
+close STDOUT;

@@ -1,59 +1,10 @@
 /*
- * DTLS implementation written by Nagendra Modadugu
- * (nagendra@cs.stanford.edu) for the OpenSSL project 2005.
- */
-/* ====================================================================
- * Copyright (c) 1999-2005 The OpenSSL Project.  All rights reserved.
+ * Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.OpenSSL.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@OpenSSL.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.OpenSSL.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com).
- *
+ * Licensed under the OpenSSL license (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://www.openssl.org/source/license.html
  */
 
 #include <stdio.h>
@@ -94,12 +45,6 @@
          ((a)->s6_addr32[2] == htonl(0x0000ffff)))
 # endif
 
-# ifdef WATT32
-#  define sock_write SockWrite  /* Watt-32 uses same names */
-#  define sock_read  SockRead
-#  define sock_puts  SockPuts
-# endif
-
 static int dgram_write(BIO *h, const char *buf, int num);
 static int dgram_read(BIO *h, char *buf, int size);
 static int dgram_puts(BIO *h, const char *str);
@@ -125,10 +70,14 @@ static int BIO_dgram_should_retry(int s);
 
 static void get_current_time(struct timeval *t);
 
-static BIO_METHOD methods_dgramp = {
+static const BIO_METHOD methods_dgramp = {
     BIO_TYPE_DGRAM,
     "datagram socket",
+    /* TODO: Convert to new style write function */
+    bwrite_conv,
     dgram_write,
+    /* TODO: Convert to new style read function */
+    bread_conv,
     dgram_read,
     dgram_puts,
     NULL,                       /* dgram_gets, */
@@ -139,7 +88,7 @@ static BIO_METHOD methods_dgramp = {
 };
 
 # ifndef OPENSSL_NO_SCTP
-static BIO_METHOD methods_dgramp_sctp = {
+static const BIO_METHOD methods_dgramp_sctp = {
     BIO_TYPE_DGRAM_SCTP,
     "datagram sctp socket",
     dgram_sctp_write,
@@ -189,7 +138,7 @@ typedef struct bio_dgram_sctp_data_st {
 } bio_dgram_sctp_data;
 # endif
 
-BIO_METHOD *BIO_s_datagram(void)
+const BIO_METHOD *BIO_s_datagram(void)
 {
     return (&methods_dgramp);
 }
@@ -236,7 +185,7 @@ static int dgram_clear(BIO *a)
         return (0);
     if (a->shutdown) {
         if (a->init) {
-            SHUTDOWN2(a->num);
+            BIO_closesocket(a->num);
         }
         a->init = 0;
         a->flags = 0;
@@ -458,6 +407,7 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
     int *ip;
     bio_dgram_data *data = NULL;
     int sockopt_val = 0;
+    int d_errno;
 # if defined(OPENSSL_SYS_LINUX) && (defined(IP_MTU_DISCOVER) || defined(IP_MTU))
     socklen_t sockopt_len;      /* assume that system supporting IP_MTU is
                                  * modern enough to define socklen_t */
@@ -760,11 +710,11 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
         /* fall-through */
     case BIO_CTRL_DGRAM_GET_RECV_TIMER_EXP:
 # ifdef OPENSSL_SYS_WINDOWS
-        if (data->_errno == WSAETIMEDOUT)
+        d_errno = (data->_errno == WSAETIMEDOUT);
 # else
-        if (data->_errno == EAGAIN)
+        d_errno = (data->_errno == EAGAIN);
 # endif
-        {
+        if (d_errno) {
             ret = 1;
             data->_errno = 0;
         } else
@@ -857,7 +807,7 @@ static int dgram_puts(BIO *bp, const char *str)
 }
 
 # ifndef OPENSSL_NO_SCTP
-BIO_METHOD *BIO_s_datagram_sctp(void)
+const BIO_METHOD *BIO_s_datagram_sctp(void)
 {
     return (&methods_dgramp_sctp);
 }

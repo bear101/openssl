@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2011-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -102,7 +109,7 @@ $shaext=1;	### set to zero if compiling for 1.0.1
 
 $stitched_decrypt=0;
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
+open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\"";
 *STDOUT=*OUT;
 
 # void aesni_cbc_sha1_enc(const void *inp,
@@ -786,7 +793,7 @@ sub body_00_19_dec () {	# ((c^d)&b)^d
 sub body_20_39_dec () {	# b^d^c
     # on entry @T[0]=b^d
     return &body_40_59_dec() if ($rx==39);
-  
+
     my @r=@body_20_39;
 
 	unshift (@r,@aes256_dec[$rx])	if (@aes256_dec[$rx]);

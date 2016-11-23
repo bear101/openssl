@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -40,7 +47,7 @@
 #
 # Performance in clock cycles per processed byte (less is better):
 #
-#		gcc	icc	x86 asm(*)	SIMD	x86_64 asm(**)	
+#		gcc	icc	x86 asm(*)	SIMD	x86_64 asm(**)
 # Pentium	46	57	40/38		-	-
 # PIII		36	33	27/24		-	-
 # P4		41	38	28		-	17.3
@@ -62,6 +69,9 @@
 $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 push(@INC,"${dir}","${dir}../../perlasm");
 require "x86asm.pl";
+
+$output=pop;
+open STDOUT,">$output";
 
 &asm_init($ARGV[0],"sha512-586.pl",$ARGV[$#ARGV] eq "386");
 
@@ -266,7 +276,7 @@ my $suffix=shift;
 	&mov	($Coff,"ecx");
 	&mov	($Doff,"edi");
 	&mov	(&DWP(0,"esp"),"ebx");	# magic
-	&mov	($E,&DWP(16,"esi"));	
+	&mov	($E,&DWP(16,"esi"));
 	&mov	("ebx",&DWP(20,"esi"));
 	&mov	("ecx",&DWP(24,"esi"));
 	&mov	("edi",&DWP(28,"esi"));
@@ -375,7 +385,7 @@ my @AH=($A,$K256);
 	&xor	($AH[1],"ecx");		# magic
 	&mov	(&DWP(8,"esp"),"ecx");
 	&mov	(&DWP(12,"esp"),"ebx");
-	&mov	($E,&DWP(16,"esi"));	
+	&mov	($E,&DWP(16,"esi"));
 	&mov	("ebx",&DWP(20,"esi"));
 	&mov	("ecx",&DWP(24,"esi"));
 	&mov	("esi",&DWP(28,"esi"));
@@ -1279,3 +1289,5 @@ sub bodyx_00_15 () {			# +10%
 &function_end_B("sha256_block_data_order");
 
 &asm_finish();
+
+close STDOUT;

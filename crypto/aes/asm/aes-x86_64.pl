@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2005-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@fy.chalmers.se> for the OpenSSL
@@ -37,7 +44,7 @@ $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 ( $xlate="${dir}../../perlasm/x86_64-xlate.pl" and -f $xlate) or
 die "can't locate x86_64-xlate.pl";
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
+open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\"";
 *STDOUT=*OUT;
 
 $verticalspin=1;	# unlike 32-bit version $verticalspin performs
@@ -1291,7 +1298,7 @@ $code.=<<___;
 AES_set_encrypt_key:
 	push	%rbx
 	push	%rbp
-	push	%r12			# redundant, but allows to share 
+	push	%r12			# redundant, but allows to share
 	push	%r13			# exception handler...
 	push	%r14
 	push	%r15
@@ -1417,7 +1424,7 @@ $code.=<<___;
 	xor	%rax,%rax
 	jmp	.Lexit
 
-.L14rounds:		
+.L14rounds:
 	mov	0(%rsi),%rax			# copy first 8 dwords
 	mov	8(%rsi),%rbx
 	mov	16(%rsi),%rcx

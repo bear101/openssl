@@ -1,57 +1,12 @@
-# Written by Matt Caswell for the OpenSSL project.
-# ====================================================================
-# Copyright (c) 1998-2015 The OpenSSL Project.  All rights reserved.
+# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in
-#    the documentation and/or other materials provided with the
-#    distribution.
-#
-# 3. All advertising materials mentioning features or use of this
-#    software must display the following acknowledgment:
-#    "This product includes software developed by the OpenSSL Project
-#    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
-#
-# 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
-#    endorse or promote products derived from this software without
-#    prior written permission. For written permission, please contact
-#    openssl-core@openssl.org.
-#
-# 5. Products derived from this software may not be called "OpenSSL"
-#    nor may "OpenSSL" appear in their names without prior written
-#    permission of the OpenSSL Project.
-#
-# 6. Redistributions of any form whatsoever must retain the following
-#    acknowledgment:
-#    "This product includes software developed by the OpenSSL Project
-#    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
-#
-# THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
-# EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
-# ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-# STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
-# OF THE POSSIBILITY OF SUCH DAMAGE.
-# ====================================================================
-#
-# This product includes cryptographic software written by Eric Young
-# (eay@cryptsoft.com).  This product includes software written by Tim
-# Hudson (tjh@cryptsoft.com).
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
 
 use strict;
+use POSIX ":sys_wait_h";
 
 package TLSProxy::Proxy;
 
@@ -67,6 +22,8 @@ use TLSProxy::NewSessionTicket;
 
 my $have_IPv6 = 0;
 my $IP_factory;
+
+my $is_tls13 = 0;
 
 sub new
 {
@@ -86,13 +43,14 @@ sub new
         serverflags => "",
         clientflags => "",
         serverconnects => 1,
+        serverpid => 0,
 
         #Public read
         execute => $execute,
         cert => $cert,
         debug => $debug,
         cipherc => "",
-        ciphers => "AES128-SHA",
+        ciphers => "AES128-SHA:TLS13-AES-128-GCM-SHA256",
         flight => 0,
         record_list => [],
         message_list => [],
@@ -138,21 +96,30 @@ sub new
     return bless $self, $class;
 }
 
-sub clear
+sub clearClient
 {
     my $self = shift;
 
     $self->{cipherc} = "";
-    $self->{ciphers} = "AES128-SHA";
     $self->{flight} = 0;
     $self->{record_list} = [];
     $self->{message_list} = [];
-    $self->{serverflags} = "";
     $self->{clientflags} = "";
-    $self->{serverconnects} = 1;
+    $is_tls13 = 0;
 
     TLSProxy::Message->clear();
     TLSProxy::Record->clear();
+}
+
+sub clear
+{
+    my $self = shift;
+
+    $self->clearClient;
+    $self->{ciphers} = "AES128-SHA:TLS13-AES-128-GCM-SHA256";
+    $self->{serverflags} = "";
+    $self->{serverconnects} = 1;
+    $self->{serverpid} = 0;
 }
 
 sub restart
@@ -195,8 +162,9 @@ sub start
         }
         exec($execcmd);
     }
+    $self->serverpid($pid);
 
-    $self->clientstart;
+    return $self->clientstart;
 }
 
 sub clientstart
@@ -223,7 +191,8 @@ sub clientstart
     if ($proxy_sock) {
         print "Proxy started on port ".$self->proxy_port."\n";
     } else {
-        die "Failed creating proxy socket (".$proxaddr.",".$self->proxy_port."): $!\n";
+        warn "Failed creating proxy socket (".$proxaddr.",".$self->proxy_port."): $!\n";
+        return 0;
     }
 
     if ($self->execute) {
@@ -248,8 +217,11 @@ sub clientstart
     }
 
     # Wait for incoming connection from client
-    my $client_sock = $proxy_sock->accept()
-        or die "Failed accepting incoming connection: $!\n";
+    my $client_sock;
+    if(!($client_sock = $proxy_sock->accept())) {
+        warn "Failed accepting incoming connection: $!\n";
+        return 0;
+    }
 
     print "Connection opened\n";
 
@@ -261,20 +233,27 @@ sub clientstart
     do {
         my $servaddr = $self->server_addr;
         $servaddr =~ s/[\[\]]//g; # Remove [ and ]
-        $server_sock = $IP_factory->(
-            PeerAddr => $servaddr,
-            PeerPort => $self->server_port,
-            MultiHomed => 1,
-            Proto => 'tcp'
-        );
+        eval {
+            $server_sock = $IP_factory->(
+                PeerAddr => $servaddr,
+                PeerPort => $self->server_port,
+                MultiHomed => 1,
+                Proto => 'tcp'
+            );
+        };
 
         $retry--;
-        if (!$server_sock) {
+        #Some buggy IP factories can return a defined server_sock that hasn't
+        #actually connected, so we check peerport too
+        if ($@ || !defined($server_sock) || !defined($server_sock->peerport)) {
+            $server_sock->close() if defined($server_sock);
+            undef $server_sock;
             if ($retry) {
                 #Sleep for a short while
                 select(undef, undef, undef, 0.1);
             } else {
-                die "Failed to start up server (".$servaddr.",".$self->server_port."): $!\n";
+                warn "Failed to start up server (".$servaddr.",".$self->server_port."): $!\n";
+                return 0;
             }
         }
     } while (!$server_sock);
@@ -317,6 +296,14 @@ sub clientstart
     if(!$self->debug) {
         select($oldstdout);
     }
+    $self->serverconnects($self->serverconnects - 1);
+    if ($self->serverconnects == 0) {
+        die "serverpid is zero\n" if $self->serverpid == 0;
+        print "Waiting for server process to close: "
+              .$self->serverpid."\n";
+        waitpid( $self->serverpid, 0);
+    }
+    return 1;
 }
 
 sub process_packet
@@ -500,5 +487,31 @@ sub message_list
         $self->{message_list} = shift;
     }
     return $self->{message_list};
+}
+sub serverpid
+{
+    my $self = shift;
+    if (@_) {
+      $self->{serverpid} = shift;
+    }
+    return $self->{serverpid};
+}
+
+sub fill_known_data
+{
+    my $length = shift;
+    my $ret = "";
+    for (my $i = 0; $i < $length; $i++) {
+        $ret .= chr($i);
+    }
+    return $ret;
+}
+sub is_tls13
+{
+    my $class = shift;
+    if (@_) {
+      $is_tls13 = shift;
+    }
+    return $is_tls13;
 }
 1;

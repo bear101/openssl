@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -22,6 +29,7 @@
 # Ivy Bridge	6.71/+46%	5.40/6.49	2.41
 # Haswell	5.92/+43%	5.20/6.45	2.42	    1.23
 # Silvermont	12.0/+33%	7.75/7.40	7.03(iii)
+# Goldmont	10.6/+17%	5.10/-		3.28
 # Sledgehammer	7.28/+52%	-/14.2(ii)	-
 # Bulldozer	9.66/+28%	9.85/11.1	3.06(iv)
 # VIA Nano	10.5/+46%	6.72/8.60	6.05
@@ -67,7 +75,7 @@ if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
+open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\"";
 *STDOUT=*OUT;
 
 # input parameter block
@@ -1544,13 +1552,13 @@ $code.=<<___;
 	je		.Ldone4xop
 
 	lea		0x40($inp),$inp		# inp+=64*3
-	vmovdqa		$xa2,0x00(%rsp)
+	vmovdqa		$xa3,0x00(%rsp)
 	xor		%r10,%r10
-	vmovdqa		$xb2,0x10(%rsp)
+	vmovdqa		$xb3,0x10(%rsp)
 	lea		0x40($out),$out		# out+=64*3
-	vmovdqa		$xc2,0x20(%rsp)
+	vmovdqa		$xc3,0x20(%rsp)
 	sub		\$192,$len		# len-=64*3
-	vmovdqa		$xd2,0x30(%rsp)
+	vmovdqa		$xd3,0x30(%rsp)
 
 .Loop_tail4xop:
 	movzb		($inp,%r10),%eax

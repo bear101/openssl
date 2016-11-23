@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2006-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -78,9 +85,11 @@
 # VIA Nano	9.32		7.15/+30%
 # Atom		10.3		9.17/+12%
 # Silvermont	13.1(*)		9.37/+40%
+# Goldmont	8.13		6.42/+27%	1.70/+380%(**)
 #
 # (*)	obviously suboptimal result, nothing was done about it,
 #	because SSSE3 code is compiled unconditionally;
+# (**)	SHAEXT result
 
 $flavour = shift;
 $output  = shift;
@@ -115,7 +124,7 @@ if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([
 $shaext=1;	### set to zero if compiling for 1.0.1
 $avx=1		if (!$shaext && $avx);
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
+open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\"";
 *STDOUT=*OUT;
 
 $ctx="%rdi";	# 1st arg
@@ -255,7 +264,7 @@ sha1_block_data_order:
 	jz	.Lialu
 ___
 $code.=<<___ if ($shaext);
-	test	\$`1<<29`,%r10d		# check SHA bit	
+	test	\$`1<<29`,%r10d		# check SHA bit
 	jnz	_shaext_shortcut
 ___
 $code.=<<___ if ($avx>1);
@@ -373,9 +382,9 @@ $code.=<<___;
 .align	16
 .Loop_shaext:
 	dec		$num
-	lea		0x40($inp),%rax		# next input block
+	lea		0x40($inp),%r8		# next input block
 	paddd		@MSG[0],$E
-	cmovne		%rax,$inp
+	cmovne		%r8,$inp
 	movdqa		$ABCD,$ABCD_SAVE	# offload $ABCD
 ___
 for($i=0;$i<20-4;$i+=2) {

@@ -1,3 +1,12 @@
+/*
+ * Copyright 2002-2016 The OpenSSL Project Authors. All Rights Reserved.
+ *
+ * Licensed under the OpenSSL license (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://www.openssl.org/source/license.html
+ */
+
 /* ====================================================================
  * Copyright 2002 Sun Microsystems, Inc. ALL RIGHTS RESERVED.
  *
@@ -10,59 +19,6 @@
  *
  * The ECDH software is originally written by Douglas Stebila of
  * Sun Microsystems Laboratories.
- *
- */
-/* ====================================================================
- * Copyright (c) 1998-2003 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com).
  *
  */
 
@@ -432,8 +388,7 @@ static int ecdh_kat(BIO *out, const ecdh_kat_t *kat)
         goto err;
     if((Z = OPENSSL_zalloc(Ztmplen)) == NULL)
         goto err;
-    /* Z offset compensates for bn2bin stripping leading 0x00 bytes */
-    if(!BN_bn2bin(bnz, Z + Ztmplen - Zlen))
+    if(!BN_bn2binpad(bnz, Z, Ztmplen))
         goto err;
     if (!ECDH_compute_key(Ztmp, Ztmplen,
                           EC_KEY_get0_public_key(key2), key1, 0))
@@ -457,6 +412,131 @@ static int ecdh_kat(BIO *out, const ecdh_kat_t *kat)
         BIO_puts(out, " ok\n");
     else {
         fprintf(stderr, "Error in ECDH routines\n");
+        ERR_print_errors_fp(stderr);
+    }
+    return rv;
+}
+
+#include "ecdhtest_cavs.h"
+
+/*
+ * NIST SP800-56A co-factor ECDH tests.
+ * KATs taken from NIST documents with parameters:
+ *
+ * - (QCAVSx,QCAVSy) is the public key for CAVS.
+ * - dIUT is the private key for IUT.
+ * - (QIUTx,QIUTy) is the public key for IUT.
+ * - ZIUT is the shared secret KAT.
+ *
+ * CAVS: Cryptographic Algorithm Validation System
+ * IUT: Implementation Under Test
+ *
+ * This function tests two things:
+ *
+ * 1. dIUT * G = (QIUTx,QIUTy)
+ *    i.e. public key for IUT computes correctly.
+ * 2. x-coord of cofactor * dIUT * (QCAVSx,QCAVSy) = ZIUT
+ *    i.e. co-factor ECDH key computes correctly.
+ *
+ * returns zero on failure or unsupported curve. One otherwise.
+ */
+static int ecdh_cavs_kat(BIO *out, const ecdh_cavs_kat_t *kat)
+{
+    int rv = 0, is_char_two = 0;
+    EC_KEY *key1 = NULL;
+    EC_POINT *pub = NULL;
+    const EC_GROUP *group = NULL;
+    BIGNUM *bnz = NULL, *x = NULL, *y = NULL;
+    unsigned char *Ztmp = NULL, *Z = NULL;
+    size_t Ztmplen, Zlen;
+    BIO_puts(out, "Testing ECC CDH Primitive SP800-56A with ");
+    BIO_puts(out, OBJ_nid2sn(kat->nid));
+
+    /* dIUT is IUT's private key */
+    if ((key1 = mk_eckey(kat->nid, kat->dIUT)) == NULL)
+        goto err;
+    /* these are cofactor ECDH KATs */
+    EC_KEY_set_flags(key1, EC_FLAG_COFACTOR_ECDH);
+
+    if ((group = EC_KEY_get0_group(key1)) == NULL)
+        goto err;
+    if ((pub = EC_POINT_new(group)) == NULL)
+        goto err;
+
+    if (EC_METHOD_get_field_type(EC_GROUP_method_of(group)) == NID_X9_62_characteristic_two_field)
+        is_char_two = 1;
+
+    /* (QIUTx, QIUTy) is IUT's public key */
+    if(!BN_hex2bn(&x, kat->QIUTx))
+        goto err;
+    if(!BN_hex2bn(&y, kat->QIUTy))
+        goto err;
+    if (is_char_two) {
+#ifdef OPENSSL_NO_EC2M
+        goto err;
+#else
+        if (!EC_POINT_set_affine_coordinates_GF2m(group, pub, x, y, NULL))
+            goto err;
+#endif
+    }
+    else {
+        if (!EC_POINT_set_affine_coordinates_GFp(group, pub, x, y, NULL))
+            goto err;
+    }
+    /* dIUT * G = (QIUTx, QIUTy) should hold */
+    if (EC_POINT_cmp(group, EC_KEY_get0_public_key(key1), pub, NULL))
+        goto err;
+
+    /* (QCAVSx, QCAVSy) is CAVS's public key */
+    if(!BN_hex2bn(&x, kat->QCAVSx))
+        goto err;
+    if(!BN_hex2bn(&y, kat->QCAVSy))
+        goto err;
+    if (is_char_two) {
+#ifdef OPENSSL_NO_EC2M
+        goto err;
+#else
+        if (!EC_POINT_set_affine_coordinates_GF2m(group, pub, x, y, NULL))
+            goto err;
+#endif
+    }
+    else {
+        if (!EC_POINT_set_affine_coordinates_GFp(group, pub, x, y, NULL))
+            goto err;
+    }
+
+    /* ZIUT is the shared secret */
+    if(!BN_hex2bn(&bnz, kat->ZIUT))
+        goto err;
+    Ztmplen = (EC_GROUP_get_degree(EC_KEY_get0_group(key1)) + 7) / 8;
+    Zlen = BN_num_bytes(bnz);
+    if (Zlen > Ztmplen)
+        goto err;
+    if((Ztmp = OPENSSL_zalloc(Ztmplen)) == NULL)
+        goto err;
+    if((Z = OPENSSL_zalloc(Ztmplen)) == NULL)
+        goto err;
+    if(!BN_bn2binpad(bnz, Z, Ztmplen))
+        goto err;
+    if (!ECDH_compute_key(Ztmp, Ztmplen, pub, key1, 0))
+        goto err;
+    /* shared secrets should be identical */
+    if (memcmp(Ztmp, Z, Ztmplen))
+        goto err;
+    rv = 1;
+ err:
+    EC_KEY_free(key1);
+    EC_POINT_free(pub);
+    BN_free(bnz);
+    BN_free(x);
+    BN_free(y);
+    OPENSSL_free(Ztmp);
+    OPENSSL_free(Z);
+    if (rv) {
+        BIO_puts(out, " ok\n");
+    }
+    else {
+        fprintf(stderr, "Error in ECC CDH routines\n");
         ERR_print_errors_fp(stderr);
     }
     return rv;
@@ -493,12 +573,25 @@ int main(int argc, char *argv[])
     /* NAMED CURVES TESTS */
     for (n = 0; n < crv_len; n++) {
         nid = curves[n].nid;
+        /*
+         * Skipped for X25519 because affine coordinate operations are not
+         * supported for this curve.
+         * Higher level ECDH tests are performed in evptests.txt instead.
+         */
+        if (nid == NID_X25519)
+            continue;
         if (!test_ecdh_curve(nid, ctx, out)) goto err;
     }
 
     /* KATs */
     for (n = 0; n < (sizeof(ecdh_kats)/sizeof(ecdh_kat_t)); n++) {
         if (!ecdh_kat(out, &ecdh_kats[n]))
+            goto err;
+    }
+
+    /* NIST SP800-56A co-factor ECDH KATs */
+    for (n = 0; n < (sizeof(ecdh_cavs_kats)/sizeof(ecdh_cavs_kat_t)); n++) {
+        if (!ecdh_cavs_kat(out, &ecdh_cavs_kats[n]))
             goto err;
     }
 
