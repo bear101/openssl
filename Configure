@@ -60,11 +60,12 @@ my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [-Dxxx] [-lx
 # zlib-dynamic	Like "zlib", but the zlib library is expected to be a shared
 #		library and will be loaded in run-time by the OpenSSL library.
 # sctp          include SCTP support
-# 386           generate 80386 code
 # enable-weak-ssl-ciphers
 #               Enable weak ciphers that are disabled by default. This currently
 #               only includes RC4 based ciphers.
-# no-sse2	disables IA-32 SSE2 code, above option implies no-sse2
+# 386           generate 80386 code in assembly modules
+# no-sse2       disables IA-32 SSE2 code in assembly modules, the above
+#               mentioned '386' option implies this one
 # no-<cipher>   build without specified algorithm (rsa, idea, rc5, ...)
 # -<xxx> +<xxx> compiler options are passed through
 # -static       while -static is also a pass-through compiler option (and
@@ -102,18 +103,19 @@ my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [-Dxxx] [-lx
 # past these.
 
 # DEBUG_UNUSED enables __owur (warn unused result) checks.
+# -DPEDANTIC complements -pedantic and is meant to mask code that
+# is not strictly standard-compliant and/or implementation-specific,
+# e.g. inline assembly, disregards to alignment requirements, such
+# that -pedantic would complain about. Incidentally -DPEDANTIC has
+# to be used even in sanitized builds, because sanitizer too is
+# supposed to and does take notice of non-standard behaviour. Then
+# -pedantic with pre-C9x compiler would also complain about 'long
+# long' not being supported. As 64-bit algorithms are common now,
+# it grew impossible to resolve this without sizeable additional
+# code, so we just tell compiler to be pedantic about everything
+# but 'long long' type.
+
 my $gcc_devteam_warn = "-DDEBUG_UNUSED"
-        # -DPEDANTIC complements -pedantic and is meant to mask code that
-        # is not strictly standard-compliant and/or implementation-specific,
-        # e.g. inline assembly, disregards to alignment requirements, such
-        # that -pedantic would complain about. Incidentally -DPEDANTIC has
-        # to be used even in sanitized builds, because sanitizer too is
-        # supposed to and does take notice of non-standard behaviour. Then
-        # -pedantic with pre-C9x compiler would also complain about 'long
-        # long' not being supported. As 64-bit algorithms are common now,
-        # it grew impossible to resolve this without sizeable additional
-        # code, so we just tell compiler to be pedantic about everything
-        # but 'long long' type.
         . " -Wswitch"
         . " -DPEDANTIC -pedantic -Wno-long-long"
         . " -Wall"
@@ -122,6 +124,7 @@ my $gcc_devteam_warn = "-DDEBUG_UNUSED"
         . " -Wshadow"
         . " -Wformat"
         . " -Wtype-limits"
+        . " -Wno-parentheses-equality"
         . " -Werror"
         ;
 
@@ -129,7 +132,7 @@ my $gcc_devteam_warn = "-DDEBUG_UNUSED"
 # TODO(openssl-team): fix problems and investigate if (at least) the
 # following warnings can also be enabled:
 #       -Wcast-align
-#       -Wunreachable-code
+#       -Wunreachable-code -- no, too ugly/compiler-specific
 #       -Wlanguage-extension-token -- no, we use asm()
 #       -Wunused-macros -- no, too tricky for BN and _XOPEN_SOURCE etc
 #       -Wextended-offsetof -- no, needed in CMS ASN1 code
@@ -138,6 +141,7 @@ my $clang_devteam_warn = ""
         . " -Wextra"
         . " -Wswitch -Wswitch-default"
         . " -Wno-unused-parameter"
+        . " -Wno-parentheses-equality"
         . " -Wno-missing-field-initializers"
         . " -Wno-language-extension-token"
         . " -Wno-extended-offsetof"
@@ -309,7 +313,7 @@ $config{dirs} = [ "crypto", "ssl", "engines", "apps", "test", "util", "tools", "
 # crypto/ subdirectories to build
 $config{sdirs} = [
     "objects",
-    "md2", "md4", "md5", "sha", "mdc2", "hmac", "ripemd", "whrlpool", "poly1305", "blake2",
+    "md2", "md4", "md5", "sha", "mdc2", "hmac", "ripemd", "whrlpool", "poly1305", "blake2", "siphash",
     "des", "aes", "rc2", "rc4", "rc5", "idea", "bf", "cast", "camellia", "seed", "chacha", "modes",
     "bn", "ec", "rsa", "dsa", "dh", "dso", "engine",
     "buffer", "bio", "stack", "lhash", "rand", "err",
@@ -393,6 +397,7 @@ my @disablables = (
     "sctp",
     "seed",
     "shared",
+    "siphash",
     "sock",
     "srp",
     "srtp",
@@ -467,6 +472,8 @@ my @disable_cascades = (
     "dgram"		=> [ "dtls", "sctp" ],
     "sock"		=> [ "dgram" ],
     "dtls"		=> [ @dtls ],
+    sub { 0 == scalar grep { !$disabled{$_} } @dtls }
+			=> [ "dtls" ],
 
     # SSL 3.0, (D)TLS 1.0 and TLS 1.1 require MD5 and SHA
     "md5"		=> [ "ssl", "tls1", "tls1_1", "dtls1" ],
@@ -487,6 +494,8 @@ my @disable_cascades = (
 			     "dtls1", "dtls1_2" ],
 
     "tls"		=> [ @tls ],
+    sub { 0 == scalar grep { !$disabled{$_} } @tls }
+			=> [ "tls" ],
 
     # SRP and HEARTBEATS require TLSEXT
     "tlsext"		=> [ "srp", "heartbeats" ],
@@ -506,7 +515,8 @@ my @disable_cascades = (
 
     "stdio"             => [ "apps", "capieng" ],
     "apps"              => [ "tests" ],
-    "comp"		=> [ "zlib" ],
+    "comp"              => [ "zlib" ],
+    "ec"                => [ "tls1_3" ],
     sub { !$disabled{"unit-test"} } => [ "heartbeats" ],
 
     sub { !$disabled{"msan"} } => [ "asm" ],
@@ -1109,10 +1119,6 @@ if ($disabled{"dynamic-engine"}) {
         $config{dynamic_engines} = 1;
 }
 
-unless ($disabled{"fuzz-libfuzzer"}) {
-    $config{cflags} .= "-fsanitize-coverage=edge,indirect-calls ";
-}
-
 unless ($disabled{asan}) {
     $config{cflags} .= "-fsanitize=address ";
 }
@@ -1308,7 +1314,7 @@ unless ($disabled{"crypto-mdebug-backtrace"})
 		}
 	}
 
-if ($user_cflags ne "") { $config{cflags}="$config{cflags}$user_cflags"; }
+if ($user_cflags ne "") { $config{cflags}="$config{cflags}$user_cflags"; $config{cxxflags}="$config{cxxflags}$user_cflags";}
 else                    { $no_user_cflags=1;  }
 if (@user_defines) { $config{defines}=[ @{$config{defines}}, @user_defines ]; }
 else               { $no_user_defines=1;    }

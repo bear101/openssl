@@ -19,8 +19,6 @@ push @is_disabled, anydisabled("ssl3", "tls1", "tls1_1", "tls1_2");
 
 our @tests = ();
 
-my $dir_sep = $^O ne "VMS" ? "/" : "";
-
 sub generate_tests() {
 
     foreach (0..$#protocols) {
@@ -32,6 +30,15 @@ sub generate_tests() {
                 $caalert = "BadCertificate";
             } else {
                 $caalert = "UnknownCA";
+            }
+            my $clihash;
+            my $clisigtype;
+            my $clisigalgs;
+            # TODO(TLS1.3) add TLSv1.3 versions
+            if ($protocol_name eq "TLSv1.2") {
+                $clihash = "SHA256";
+                $clisigtype = "RSA";
+                $clisigalgs = "SHA256+RSA";
             }
             # Sanity-check simple handshake.
             push @tests, {
@@ -68,7 +75,7 @@ sub generate_tests() {
                 server => {
                     "MinProtocol" => $protocol,
                     "MaxProtocol" => $protocol,
-                    "VerifyCAFile" => "\${ENV::TEST_CERTS_DIR}${dir_sep}root-cert.pem",
+                    "VerifyCAFile" => test_pem("root-cert.pem"),
                     "VerifyMode" => "Require",
                 },
                 client => {
@@ -87,16 +94,21 @@ sub generate_tests() {
                 server => {
                     "MinProtocol" => $protocol,
                     "MaxProtocol" => $protocol,
-                    "VerifyCAFile" => "\${ENV::TEST_CERTS_DIR}${dir_sep}root-cert.pem",
+                    "ClientSignatureAlgorithms" => $clisigalgs,
+                    "VerifyCAFile" => test_pem("root-cert.pem"),
                     "VerifyMode" => "Request",
                 },
                 client => {
                     "MinProtocol" => $protocol,
                     "MaxProtocol" => $protocol,
-                    "Certificate" => "\${ENV::TEST_CERTS_DIR}${dir_sep}ee-client-chain.pem",
-                    "PrivateKey"  => "\${ENV::TEST_CERTS_DIR}${dir_sep}ee-key.pem",
+                    "Certificate" => test_pem("ee-client-chain.pem"),
+                    "PrivateKey"  => test_pem("ee-key.pem"),
                 },
-                test   => { "ExpectedResult" => "Success" },
+                test   => { "ExpectedResult" => "Success",
+                            "ExpectedClientCertType" => "RSA",
+                            "ExpectedClientSignType" => $clisigtype,
+                            "ExpectedClientSignHash" => $clihash,
+                },
             };
 
             # Handshake with client authentication but without the root certificate.
@@ -110,8 +122,8 @@ sub generate_tests() {
                 client => {
                     "MinProtocol" => $protocol,
                     "MaxProtocol" => $protocol,
-                    "Certificate" => "\${ENV::TEST_CERTS_DIR}${dir_sep}ee-client-chain.pem",
-                    "PrivateKey"  => "\${ENV::TEST_CERTS_DIR}${dir_sep}ee-key.pem",
+                    "Certificate" => test_pem("ee-client-chain.pem"),
+                    "PrivateKey"  => test_pem("ee-key.pem"),
                 },
                 test   => {
                     "ExpectedResult" => "ServerFail",

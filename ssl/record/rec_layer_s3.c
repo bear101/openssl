@@ -8,6 +8,7 @@
  */
 
 #include <stdio.h>
+#include <assert.h>
 #include <limits.h>
 #include <errno.h>
 #define USE_SOCKETS
@@ -16,10 +17,6 @@
 #include <openssl/buffer.h>
 #include <openssl/rand.h>
 #include "record_locl.h"
-
-#ifndef  EVP_CIPH_FLAG_TLS1_1_MULTIBLOCK
-# define EVP_CIPH_FLAG_TLS1_1_MULTIBLOCK 0
-#endif
 
 #if     defined(OPENSSL_SMALL_FOOTPRINT) || \
         !(      defined(AES_ASM) &&     ( \
@@ -39,8 +36,6 @@ void RECORD_LAYER_init(RECORD_LAYER *rl, SSL *s)
 
 void RECORD_LAYER_clear(RECORD_LAYER *rl)
 {
-    unsigned int pipes;
-
     rl->rstate = SSL_ST_READ_HEADER;
 
     /*
@@ -62,9 +57,7 @@ void RECORD_LAYER_clear(RECORD_LAYER *rl)
     rl->wpend_buf = NULL;
 
     SSL3_BUFFER_clear(&rl->rbuf);
-    for (pipes = 0; pipes < rl->numwpipes; pipes++)
-        SSL3_BUFFER_clear(&rl->wbuf[pipes]);
-    rl->numwpipes = 0;
+    ssl3_release_write_buffer(rl->s);
     rl->numrpipes = 0;
     SSL3_RECORD_clear(rl->rrec, SSL_MAX_PIPELINES);
 
@@ -408,7 +401,7 @@ int ssl3_write_bytes(SSL *s, int type, const void *buf_, size_t len,
     if (type == SSL3_RT_APPLICATION_DATA &&
         len >= 4 * (max_send_fragment = s->max_send_fragment) &&
         s->compress == NULL && s->msg_callback == NULL &&
-        !SSL_USE_ETM(s) && SSL_USE_EXPLICIT_IV(s) &&
+        !SSL_WRITE_ETM(s) && SSL_USE_EXPLICIT_IV(s) &&
         EVP_CIPHER_flags(EVP_CIPHER_CTX_cipher(s->enc_write_ctx)) &
         EVP_CIPH_FLAG_TLS1_1_MULTIBLOCK) {
         unsigned char aad[13];
@@ -633,15 +626,18 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
                   size_t *pipelens, size_t numpipes,
                   int create_empty_fragment, size_t *written)
 {
-    unsigned char *outbuf[SSL_MAX_PIPELINES], *plen[SSL_MAX_PIPELINES];
+    WPACKET pkt[SSL_MAX_PIPELINES];
     SSL3_RECORD wr[SSL_MAX_PIPELINES];
+    WPACKET *thispkt;
+    SSL3_RECORD *thiswr;
+    unsigned char *recordstart;
     int i, mac_size, clear = 0;
     size_t prefix_len = 0;
-    int eivlen;
+    int eivlen = 0;
     size_t align = 0;
     SSL3_BUFFER *wb;
     SSL_SESSION *sess;
-    size_t totlen = 0;
+    size_t totlen = 0, len, wpinited = 0;
     size_t j;
 
     for (j = 0; j < numpipes; j++)
@@ -726,21 +722,42 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
         align = (size_t)SSL3_BUFFER_get_buf(wb) + 2 * SSL3_RT_HEADER_LENGTH;
         align = SSL3_ALIGN_PAYLOAD - 1 - ((align - 1) % SSL3_ALIGN_PAYLOAD);
 #endif
-        outbuf[0] = SSL3_BUFFER_get_buf(wb) + align;
         SSL3_BUFFER_set_offset(wb, align);
+        if (!WPACKET_init_static_len(&pkt[0], SSL3_BUFFER_get_buf(wb),
+                                     SSL3_BUFFER_get_len(wb), 0)
+                || !WPACKET_allocate_bytes(&pkt[0], align, NULL)) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
+        wpinited = 1;
     } else if (prefix_len) {
         wb = &s->rlayer.wbuf[0];
-        outbuf[0] = SSL3_BUFFER_get_buf(wb) + SSL3_BUFFER_get_offset(wb)
-            + prefix_len;
+        if (!WPACKET_init_static_len(&pkt[0],
+                                     SSL3_BUFFER_get_buf(wb),
+                                     SSL3_BUFFER_get_len(wb), 0)
+                || !WPACKET_allocate_bytes(&pkt[0], SSL3_BUFFER_get_offset(wb)
+                                                    + prefix_len, NULL)) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
+        wpinited = 1;
     } else {
         for (j = 0; j < numpipes; j++) {
+            thispkt = &pkt[j];
+
             wb = &s->rlayer.wbuf[j];
-#if defined(SSL3_ALIGN_PAYLOAD) && SSL3_ALIGN_PAYLOAD!=0
+#if defined(SSL3_ALIGN_PAYLOAD) && SSL3_ALIGN_PAYLOAD != 0
             align = (size_t)SSL3_BUFFER_get_buf(wb) + SSL3_RT_HEADER_LENGTH;
             align = SSL3_ALIGN_PAYLOAD - 1 - ((align - 1) % SSL3_ALIGN_PAYLOAD);
 #endif
-            outbuf[j] = SSL3_BUFFER_get_buf(wb) + align;
             SSL3_BUFFER_set_offset(wb, align);
+            if (!WPACKET_init_static_len(thispkt, SSL3_BUFFER_get_buf(wb),
+                                         SSL3_BUFFER_get_len(wb), 0)
+                    || !WPACKET_allocate_bytes(thispkt, align, NULL)) {
+                SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+                goto err;
+            }
+            wpinited++;
         }
     }
 
@@ -752,111 +769,197 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
             eivlen = EVP_CIPHER_CTX_iv_length(s->enc_write_ctx);
             if (eivlen <= 1)
                 eivlen = 0;
-        }
-        /* Need explicit part of IV for GCM mode */
-        else if (mode == EVP_CIPH_GCM_MODE)
+        } else if (mode == EVP_CIPH_GCM_MODE) {
+            /* Need explicit part of IV for GCM mode */
             eivlen = EVP_GCM_TLS_EXPLICIT_IV_LEN;
-        else if (mode == EVP_CIPH_CCM_MODE)
+        } else if (mode == EVP_CIPH_CCM_MODE) {
             eivlen = EVP_CCM_TLS_EXPLICIT_IV_LEN;
-        else
-            eivlen = 0;
-    } else
-        eivlen = 0;
+        }
+    }
 
     totlen = 0;
     /* Clear our SSL3_RECORD structures */
     memset(wr, 0, sizeof wr);
     for (j = 0; j < numpipes; j++) {
-        /* write the header */
-        *(outbuf[j]++) = type & 0xff;
-        SSL3_RECORD_set_type(&wr[j], type);
+        unsigned int version = SSL_IS_TLS13(s) ? TLS1_VERSION : s->version;
+        unsigned char *compressdata = NULL;
+        size_t maxcomplen;
+        unsigned int rectype;
 
-        *(outbuf[j]++) = (s->version >> 8);
+        thispkt = &pkt[j];
+        thiswr = &wr[j];
+
+        SSL3_RECORD_set_type(thiswr, type);
+        /*
+         * In TLSv1.3, once encrypting, we always use application data for the
+         * record type
+         */
+        if (SSL_IS_TLS13(s) && s->enc_write_ctx != NULL)
+            rectype = SSL3_RT_APPLICATION_DATA;
+        else
+            rectype = type;
         /*
          * Some servers hang if initial client hello is larger than 256 bytes
          * and record version number > TLS 1.0
          */
         if (SSL_get_state(s) == TLS_ST_CW_CLNT_HELLO
             && !s->renegotiate && TLS1_get_version(s) > TLS1_VERSION)
-            *(outbuf[j]++) = 0x1;
-        else
-            *(outbuf[j]++) = s->version & 0xff;
+            version = TLS1_VERSION;
 
-        /* field where we are to write out packet length */
-        plen[j] = outbuf[j];
-        outbuf[j] += 2;
+        maxcomplen = pipelens[j];
+        if (s->compress != NULL)
+            pipelens[j] += SSL3_RT_MAX_COMPRESSED_OVERHEAD;
+
+        /* write the header */
+        if (!WPACKET_put_bytes_u8(thispkt, rectype)
+                || !WPACKET_put_bytes_u16(thispkt, version)
+                || !WPACKET_start_sub_packet_u16(thispkt)
+                || (eivlen > 0
+                    && !WPACKET_allocate_bytes(thispkt, eivlen, NULL))
+                || (maxcomplen > 0
+                    && !WPACKET_reserve_bytes(thispkt, maxcomplen,
+                                              &compressdata))) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
 
         /* lets setup the record stuff. */
-        SSL3_RECORD_set_data(&wr[j], outbuf[j] + eivlen);
-        SSL3_RECORD_set_length(&wr[j], pipelens[j]);
-        SSL3_RECORD_set_input(&wr[j], (unsigned char *)&buf[totlen]);
+        SSL3_RECORD_set_data(thiswr, compressdata);
+        SSL3_RECORD_set_length(thiswr, pipelens[j]);
+        SSL3_RECORD_set_input(thiswr, (unsigned char *)&buf[totlen]);
         totlen += pipelens[j];
 
         /*
-         * we now 'read' from wr->input, wr->length bytes into wr->data
+         * we now 'read' from thiswr->input, thiswr->length bytes into
+         * thiswr->data
          */
 
         /* first we compress */
         if (s->compress != NULL) {
-            if (!ssl3_do_compress(s, &wr[j])) {
+            /*
+             * TODO(TLS1.3): Make sure we prevent compression!!!
+             */
+            if (!ssl3_do_compress(s, thiswr)
+                    || !WPACKET_allocate_bytes(thispkt, thiswr->length, NULL)) {
                 SSLerr(SSL_F_DO_SSL3_WRITE, SSL_R_COMPRESSION_FAILURE);
                 goto err;
             }
         } else {
-            memcpy(wr[j].data, wr[j].input, wr[j].length);
+            if (!WPACKET_memcpy(thispkt, thiswr->input, thiswr->length)) {
+                SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+                goto err;
+            }
             SSL3_RECORD_reset_input(&wr[j]);
         }
 
+        if (SSL_IS_TLS13(s) && s->enc_write_ctx != NULL) {
+            if (!WPACKET_put_bytes_u8(thispkt, type)) {
+                SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+                goto err;
+            }
+            SSL3_RECORD_add_length(thiswr, 1);
+            /*
+             * TODO(TLS1.3): Padding goes here. Do we need an API to add this?
+             * For now, use no padding
+             */
+        }
+
         /*
-         * we should still have the output to wr->data and the input from
-         * wr->input.  Length should be wr->length. wr->data still points in the
-         * wb->buf
+         * we should still have the output to thiswr->data and the input from
+         * wr->input. Length should be thiswr->length. thiswr->data still points
+         * in the wb->buf
          */
 
-        if (!SSL_USE_ETM(s) && mac_size != 0) {
-            if (!s->method->ssl3_enc->mac(s, &wr[j],
-                                          &(outbuf[j][wr[j].length + eivlen]),
-                                          1))
+        if (!SSL_WRITE_ETM(s) && mac_size != 0) {
+            unsigned char *mac;
+
+            if (!WPACKET_allocate_bytes(thispkt, mac_size, &mac)
+                    || !s->method->ssl3_enc->mac(s, thiswr, mac, 1)) {
+                SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
                 goto err;
-            SSL3_RECORD_add_length(&wr[j], mac_size);
+            }
         }
 
-        SSL3_RECORD_set_data(&wr[j], outbuf[j]);
-        SSL3_RECORD_reset_input(&wr[j]);
-
-        if (eivlen) {
-            /*
-             * if (RAND_pseudo_bytes(p, eivlen) <= 0) goto err;
-             */
-            SSL3_RECORD_add_length(&wr[j], eivlen);
+        /*
+         * Reserve some bytes for any growth that may occur during encryption.
+         * This will be at most one cipher block or the tag length if using
+         * AEAD. SSL_RT_MAX_CIPHER_BLOCK_SIZE covers either case.
+         */
+        if(!WPACKET_reserve_bytes(thispkt, SSL_RT_MAX_CIPHER_BLOCK_SIZE,
+                                  NULL)
+                   /*
+                    * We also need next the amount of bytes written to this
+                    * sub-packet
+                    */
+                || !WPACKET_get_length(thispkt, &len)) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
         }
+
+        /* Get a pointer to the start of this record excluding header */
+        recordstart = WPACKET_get_curr(thispkt) - len;
+
+        SSL3_RECORD_set_data(thiswr, recordstart);
+        SSL3_RECORD_reset_input(thiswr);
+        SSL3_RECORD_set_length(thiswr, len);
     }
 
     if (s->method->ssl3_enc->enc(s, wr, numpipes, 1) < 1)
         goto err;
 
     for (j = 0; j < numpipes; j++) {
-        if (SSL_USE_ETM(s) && mac_size != 0) {
-            if (!s->method->ssl3_enc->mac(s, &wr[j],
-                                          outbuf[j] + wr[j].length, 1))
+        size_t origlen;
+
+        thispkt = &pkt[j];
+        thiswr = &wr[j];
+
+        /* Allocate bytes for the encryption overhead */
+        if (!WPACKET_get_length(thispkt, &origlen)
+                   /* Encryption should never shrink the data! */
+                || origlen > thiswr->length
+                || (thiswr->length > origlen
+                    && !WPACKET_allocate_bytes(thispkt,
+                                               thiswr->length - origlen, NULL))) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
+        if (SSL_WRITE_ETM(s) && mac_size != 0) {
+            unsigned char *mac;
+
+            if (!WPACKET_allocate_bytes(thispkt, mac_size, &mac)
+                    || !s->method->ssl3_enc->mac(s, thiswr, mac, 1)) {
+                SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
                 goto err;
-            SSL3_RECORD_add_length(&wr[j], mac_size);
+            }
+            SSL3_RECORD_add_length(thiswr, mac_size);
         }
 
-        /* record length after mac and block padding */
-        s2n(SSL3_RECORD_get_length(&wr[j]), plen[j]);
+        if (!WPACKET_get_length(thispkt, &len)
+                || !WPACKET_close(thispkt)) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
 
-        if (s->msg_callback)
-            s->msg_callback(1, 0, SSL3_RT_HEADER, plen[j] - 5, 5, s,
+        if (s->msg_callback) {
+            recordstart = WPACKET_get_curr(thispkt) - len
+                          - SSL3_RT_HEADER_LENGTH;
+            s->msg_callback(1, 0, SSL3_RT_HEADER, recordstart,
+                            SSL3_RT_HEADER_LENGTH, s,
                             s->msg_callback_arg);
+        }
+
+        if (!WPACKET_finish(thispkt)) {
+            SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
+            goto err;
+        }
 
         /*
-         * we should now have wr->data pointing to the encrypted data, which is
-         * wr->length long
+         * we should now have thiswr->data pointing to the encrypted data, which
+         * is thiswr->length long
          */
-        SSL3_RECORD_set_type(&wr[j], type); /* not needed but helps for
+        SSL3_RECORD_set_type(thiswr, type); /* not needed but helps for
                                              * debugging */
-        SSL3_RECORD_add_length(&wr[j], SSL3_RT_HEADER_LENGTH);
+        SSL3_RECORD_add_length(thiswr, SSL3_RT_HEADER_LENGTH);
 
         if (create_empty_fragment) {
             /*
@@ -868,13 +971,13 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
                 SSLerr(SSL_F_DO_SSL3_WRITE, ERR_R_INTERNAL_ERROR);
                 goto err;
             }
-            *written = SSL3_RECORD_get_length(wr);
+            *written = SSL3_RECORD_get_length(thiswr);
             return 1;
         }
 
         /* now let's set up wb */
         SSL3_BUFFER_set_left(&s->rlayer.wbuf[j],
-                             prefix_len + SSL3_RECORD_get_length(&wr[j]));
+                             prefix_len + SSL3_RECORD_get_length(thiswr));
     }
 
     /*
@@ -889,6 +992,8 @@ int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
     /* we now just need to write the buffer */
     return ssl3_write_pending(s, type, buf, totlen, written);
  err:
+    for (j = 0; j < wpinited; j++)
+        WPACKET_cleanup(&pkt[j]);
     return -1;
 }
 
@@ -1119,7 +1224,8 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
 
     if (type == SSL3_RECORD_get_type(rr)
         || (SSL3_RECORD_get_type(rr) == SSL3_RT_CHANGE_CIPHER_SPEC
-            && type == SSL3_RT_HANDSHAKE && recvd_type != NULL)) {
+            && type == SSL3_RT_HANDSHAKE && recvd_type != NULL
+            && !SSL_IS_TLS13(s))) {
         /*
          * SSL3_RT_APPLICATION_DATA or
          * SSL3_RT_HANDSHAKE or
@@ -1272,64 +1378,6 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
      * (Possibly rr is 'empty' now, i.e. rr->length may be 0.)
      */
 
-    /* If we are a client, check for an incoming 'Hello Request': */
-    if ((!s->server) &&
-        (s->rlayer.handshake_fragment_len >= 4) &&
-        (s->rlayer.handshake_fragment[0] == SSL3_MT_HELLO_REQUEST) &&
-        (s->session != NULL) && (s->session->cipher != NULL)) {
-        s->rlayer.handshake_fragment_len = 0;
-
-        if ((s->rlayer.handshake_fragment[1] != 0) ||
-            (s->rlayer.handshake_fragment[2] != 0) ||
-            (s->rlayer.handshake_fragment[3] != 0)) {
-            al = SSL_AD_DECODE_ERROR;
-            SSLerr(SSL_F_SSL3_READ_BYTES, SSL_R_BAD_HELLO_REQUEST);
-            goto f_err;
-        }
-
-        if (s->msg_callback)
-            s->msg_callback(0, s->version, SSL3_RT_HANDSHAKE,
-                            s->rlayer.handshake_fragment, 4, s,
-                            s->msg_callback_arg);
-
-        if (SSL_is_init_finished(s) &&
-            !(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS) &&
-            !s->s3->renegotiate) {
-            ssl3_renegotiate(s);
-            if (ssl3_renegotiate_check(s)) {
-                i = s->handshake_func(s);
-                if (i < 0)
-                    return i;
-                if (i == 0) {
-                    SSLerr(SSL_F_SSL3_READ_BYTES, SSL_R_SSL_HANDSHAKE_FAILURE);
-                    return -1;
-                }
-
-                if (!(s->mode & SSL_MODE_AUTO_RETRY)) {
-                    if (SSL3_BUFFER_get_left(rbuf) == 0) {
-                        /* no read-ahead left? */
-                        BIO *bio;
-                        /*
-                         * In the case where we try to read application data,
-                         * but we trigger an SSL handshake, we return -1 with
-                         * the retry option set.  Otherwise renegotiation may
-                         * cause nasty problems in the blocking world
-                         */
-                        s->rwstate = SSL_READING;
-                        bio = SSL_get_rbio(s);
-                        BIO_clear_retry_flags(bio);
-                        BIO_set_retry_read(bio);
-                        return -1;
-                    }
-                }
-            }
-        }
-        /*
-         * we either finished a handshake or ignored the request, now try
-         * again to obtain the (application) data we were asked for
-         */
-        goto start;
-    }
     /*
      * If we are a server and get a client hello when renegotiation isn't
      * allowed send back a no renegotiation alert and carry on. WARNING:
@@ -1339,6 +1387,7 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
         SSL_is_init_finished(s) &&
         !s->s3->send_connection_binding &&
         (s->version > SSL3_VERSION) &&
+        !SSL_IS_TLS13(s) &&
         (s->rlayer.handshake_fragment_len >= 4) &&
         (s->rlayer.handshake_fragment[0] == SSL3_MT_CLIENT_HELLO) &&
         (s->session != NULL) && (s->session->cipher != NULL) &&
@@ -1437,16 +1486,27 @@ int ssl3_read_bytes(SSL *s, int type, int *recvd_type, unsigned char *buf,
     }
 
     /*
-     * Unexpected handshake message (Client Hello, or protocol violation)
+     * Unexpected handshake message (ClientHello, NewSessionTicket (TLS1.3) or
+     * protocol violation)
      */
     if ((s->rlayer.handshake_fragment_len >= 4)
-        && !ossl_statem_get_in_handshake(s)) {
-        if (SSL_is_init_finished(s) &&
-            !(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS)) {
-            ossl_statem_set_in_init(s, 1);
-            s->renegotiate = 1;
-            s->new_session = 1;
+            && !ossl_statem_get_in_handshake(s)) {
+        /*
+         * To get here we must be trying to read app data but found handshake
+         * data. But if we're trying to read app data, and we're not in init
+         * (which is tested for at the top of this function) then init must be
+         * finished
+         */
+        assert(SSL_is_init_finished(s));
+        if (!SSL_is_init_finished(s)) {
+            al = SSL_AD_INTERNAL_ERROR;
+            SSLerr(SSL_F_SSL3_READ_BYTES, ERR_R_INTERNAL_ERROR);
+            goto f_err;
         }
+
+        /* We found handshake data, so we're going back into init */
+        ossl_statem_set_in_init(s, 1);
+
         i = s->handshake_func(s);
         if (i < 0)
             return i;

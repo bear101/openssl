@@ -103,6 +103,8 @@ extern "C" {
 # define TLS1_AD_INAPPROPRIATE_FALLBACK  86/* fatal */
 # define TLS1_AD_USER_CANCELLED          90
 # define TLS1_AD_NO_RENEGOTIATION        100
+/* TLSv1.3 alerts */
+# define TLS13_AD_MISSING_EXTENSION      109 /* fatal */
 /* codes 110-114 are from RFC3546 */
 # define TLS1_AD_UNSUPPORTED_EXTENSION   110
 # define TLS1_AD_CERTIFICATE_UNOBTAINABLE 111
@@ -175,7 +177,9 @@ extern "C" {
 
 /* As defined for TLS1.3 */
 # define TLSEXT_TYPE_key_share                   40
+# define TLSEXT_TYPE_psk                         41
 # define TLSEXT_TYPE_supported_versions          43
+# define TLSEXT_TYPE_psk_kex_modes               45
 
 /* Temporary extension type */
 # define TLSEXT_TYPE_renegotiate                 0xff01
@@ -247,6 +251,8 @@ __owur int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
                                const char *label, size_t llen,
                                const unsigned char *p, size_t plen,
                                int use_context);
+
+int SSL_get_peer_signature_type_nid(const SSL *s, int *pnid);
 
 int SSL_get_sigalgs(SSL *s, int idx,
                     int *psign, int *phash, int *psignandhash,
@@ -616,6 +622,10 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB,(void (*)(void))cb)
 
 /* TLS v1.3 ciphersuites */
 # define TLS1_3_CK_AES_128_GCM_SHA256                     0x03001301
+# define TLS1_3_CK_AES_256_GCM_SHA384                     0x03001302
+# define TLS1_3_CK_CHACHA20_POLY1305_SHA256               0x03001303
+# define TLS1_3_CK_AES_128_CCM_SHA256                     0x03001304
+# define TLS1_3_CK_AES_128_CCM_8_SHA256                   0x03001305
 
 /*
  * XXX Backward compatibility alert: Older versions of OpenSSL gave some DHE
@@ -892,6 +902,10 @@ SSL_CTX_callback_ctrl(ssl,SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB,(void (*)(void))cb)
  * cipherstring selection process for these ciphers
  */
 # define TLS1_3_TXT_AES_128_GCM_SHA256                     "TLS13-AES-128-GCM-SHA256"
+# define TLS1_3_TXT_AES_256_GCM_SHA384                     "TLS13-AES-256-GCM-SHA384"
+# define TLS1_3_TXT_CHACHA20_POLY1305_SHA256               "TLS13-CHACHA20-POLY1305-SHA256"
+# define TLS1_3_TXT_AES_128_CCM_SHA256                     "TLS13-AES-128-CCM-SHA256"
+# define TLS1_3_TXT_AES_128_CCM_8_SHA256                   "TLS13-AES-128-CCM-8-SHA256"
 
 # define TLS_CT_RSA_SIGN                 1
 # define TLS_CT_DSS_SIGN                 2

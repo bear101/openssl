@@ -179,12 +179,8 @@ static int custom_ext_meth_add(custom_ext_methods *exts,
     tmp = OPENSSL_realloc(exts->meths,
                           (exts->meths_count + 1) * sizeof(custom_ext_method));
 
-    if (tmp == NULL) {
-        OPENSSL_free(exts->meths);
-        exts->meths = NULL;
-        exts->meths_count = 0;
+    if (tmp == NULL)
         return 0;
-    }
 
     exts->meths = tmp;
     meth = exts->meths + exts->meths_count;
@@ -258,6 +254,9 @@ int SSL_extension_supported(unsigned int ext_type)
 #ifdef TLSEXT_TYPE_encrypt_then_mac
     case TLSEXT_TYPE_encrypt_then_mac:
 #endif
+    case TLSEXT_TYPE_key_share:
+    case TLSEXT_TYPE_supported_versions:
+    case TLSEXT_TYPE_extended_master_secret:
         return 1;
     default:
         return 0;

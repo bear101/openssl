@@ -28,7 +28,7 @@ The B<ciphers> command converts textual OpenSSL cipher lists into ordered
 SSL cipher preference lists. It can be used as a test tool to determine
 the appropriate cipherlist.
 
-=head1 COMMAND OPTIONS
+=head1 OPTIONS
 
 =over 4
 
@@ -669,6 +669,14 @@ Note: these ciphers can also be used in SSL v3.
  TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256      ECDHE-PSK-CHACHA20-POLY1305
  TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256        DHE-PSK-CHACHA20-POLY1305
  TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256        RSA-PSK-CHACHA20-POLY1305
+
+=head2 TLS v1.3 cipher suites
+
+ TLS_AES_128_GCM_SHA256                     TLS13-AES-128-GCM-SHA256
+ TLS_AES_256_GCM_SHA384                     TLS13-AES-256-GCM-SHA384
+ TLS_CHACHA20_POLY1305_SHA256               TLS13-CHACHA20-POLY1305-SHA256
+ TLS_AES_128_CCM_SHA256                     TLS13-AES-128-CCM-SHA256
+ TLS_AES_128_CCM_8_SHA256                   TLS13-AES-128-CCM-8-SHA256
 
 =head2 Older names used by OpenSSL
 

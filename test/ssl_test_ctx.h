@@ -57,7 +57,9 @@ typedef enum {
     SSL_TEST_HANDSHAKE_SIMPLE = 0, /* Default */
     SSL_TEST_HANDSHAKE_RESUME,
     SSL_TEST_HANDSHAKE_RENEG_SERVER,
-    SSL_TEST_HANDSHAKE_RENEG_CLIENT
+    SSL_TEST_HANDSHAKE_RENEG_CLIENT,
+    SSL_TEST_HANDSHAKE_KEY_UPDATE_SERVER,
+    SSL_TEST_HANDSHAKE_KEY_UPDATE_CLIENT
 } ssl_handshake_mode_t;
 
 typedef enum {
@@ -84,6 +86,8 @@ typedef struct {
     char *npn_protocols;
     char *alpn_protocols;
     ssl_ct_validation_t ct_validation;
+    /* Ciphersuites to set on a renegotiation */
+    char *reneg_ciphers;
 } SSL_TEST_CLIENT_CONF;
 
 typedef struct {
@@ -119,6 +123,8 @@ typedef struct {
     int app_data_size;
     /* Maximum send fragment size. */
     int max_fragment_size;
+    /* KeyUpdate type */
+    int key_update_type;
 
     /*
      * Extra server/client configurations. Per-handshake.
@@ -159,6 +165,20 @@ typedef struct {
     char *expected_alpn_protocol;
     /* Whether the second handshake is resumed or a full handshake (boolean). */
     int resumption_expected;
+    /* Expected temporary key type */
+    int expected_tmp_key_type;
+    /* Expected server certificate key type */
+    int expected_server_cert_type;
+    /* Expected server signing hash */
+    int expected_server_sign_hash;
+    /* Expected server signature type */
+    int expected_server_sign_type;
+    /* Expected client certificate key type */
+    int expected_client_cert_type;
+    /* Expected client signing hash */
+    int expected_client_sign_hash;
+    /* Expected client signature type */
+    int expected_client_sign_type;
 } SSL_TEST_CTX;
 
 const char *ssl_test_result_name(ssl_test_result_t result);

@@ -432,6 +432,11 @@ int DTLSv1_listen(SSL *s, BIO_ADDR *client)
     BIO_ADDR *tmpclient = NULL;
     PACKET pkt, msgpkt, msgpayload, session, cookiepkt;
 
+    if (s->handshake_func == NULL) {
+        /* Not properly initialized yet */
+        SSL_set_accept_state(s);
+    }
+
     /* Ensure there is no state left over from a previous invocation */
     if (!SSL_clear(s))
         return -1;
@@ -932,7 +937,7 @@ size_t DTLS_get_data_mtu(const SSL *s)
                                  &blocksize, &ext_overhead))
         return 0;
 
-    if (SSL_USE_ETM(s))
+    if (SSL_READ_ETM(s))
         ext_overhead += mac_overhead;
     else
         int_overhead += mac_overhead;

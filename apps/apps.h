@@ -294,7 +294,7 @@ typedef struct options_st {
     /*
      * value type: - no value (also the value zero), n number, p positive
      * number, u unsigned, l long, s string, < input file, > output file,
-     * f any format, F der/pem format , E der/pem/engine format identifier.
+     * f any format, F der/pem format, E der/pem/engine format identifier.
      * l, n and u include zero; p does not.
      */
     int valtype;
@@ -389,6 +389,7 @@ int password_callback(char *buf, int bufsiz, int verify, PW_CB_DATA *cb_data);
 
 int setup_ui_method(void);
 void destroy_ui_method(void);
+const UI_METHOD *get_ui_method(void);
 
 int chopup_args(ARGS *arg, char *buf);
 # ifdef HEADER_X509_H
@@ -557,6 +558,8 @@ int raw_write_stdout(const void *, int);
 # define TM_START        0
 # define TM_STOP         1
 double app_tminterval(int stop, int usertime);
+
+void make_uppercase(char *string);
 
 typedef struct verify_options_st {
     int depth;

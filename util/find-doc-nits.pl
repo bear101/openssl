@@ -41,8 +41,8 @@ my $OUT;
 
 my %mandatory_sections =
     ( '*'    => [ 'NAME', 'DESCRIPTION', 'COPYRIGHT' ],
-      1      => [ 'SYNOPSIS', '(COMMAND\s+)?OPTIONS' ],
-      3      => [ 'SYNOPSIS', 'RETURN\s+VALUES' ],
+      1      => [ 'SYNOPSIS', 'OPTIONS' ],
+      3      => [ 'SYNOPSIS', 'RETURN VALUES' ],
       5      => [ ],
       7      => [ ] );
 
@@ -85,7 +85,14 @@ sub name_synopsis()
         my $sym;
         $line =~ s/STACK_OF\([^)]+\)/int/g;
         $line =~ s/__declspec\([^)]+\)//;
-        if ( $line =~ /typedef.* (\S+);/ ) {
+        if ( $line =~ /env (\S*)=/ ) {
+            # environment variable env NAME=...
+            $sym = $1;
+        } elsif ( $line =~ /typedef.*\(\*(\S+)\)\(.*/ ) {
+            # a callback function: typedef ... (*NAME)(...
+            $sym = $1;
+        } elsif ( $line =~ /typedef.* (\S+);/ ) {
+            # a simple typedef: typedef ... NAME;
             $sym = $1;
         } elsif ( $line =~ /#define ([A-Za-z0-9_]+)/ ) {
             $sym = $1;
@@ -174,7 +181,7 @@ sub check()
     $section = $1 if $dirname =~ /man([1-9])/;
 
     foreach ((@{$mandatory_sections{'*'}}, @{$mandatory_sections{$section}})) {
-        print "$id doesn't have a head1 section matching $_\n"
+        print "$id: missing $_ head1 section\n"
             if $contents !~ /^=head1\s+${_}\s*$/m;
     }
 
@@ -256,6 +263,9 @@ sub printem()
 getopts('nshu');
 
 &help() if ( $opt_h );
+
+die "Need one of -n -s or -u flags.\n"
+    unless $opt_n or $opt_s or $opt_u;
 
 if ( $opt_n or $opt_s ) {
     foreach (@ARGV ? @ARGV : glob('doc/*/*.pod')) {

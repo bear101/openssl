@@ -2274,7 +2274,6 @@ int speed_main(int argc, char **argv)
 #endif
 
     if (doit[D_EVP]) {
-#ifdef EVP_CIPH_FLAG_TLS1_1_MULTIBLOCK
         if (multiblock && evp_cipher) {
             if (!
                 (EVP_CIPHER_flags(evp_cipher) &
@@ -2291,7 +2290,6 @@ int speed_main(int argc, char **argv)
             ret = 0;
             goto end;
         }
-#endif
         for (testnum = 0; testnum < SIZE_NUM; testnum++) {
             if (evp_cipher) {
 
@@ -2362,7 +2360,7 @@ int speed_main(int argc, char **argv)
                        mr ? "+R1:%ld:%d:%.2f\n"
                        : "%ld %d bit private RSA's in %.2fs\n",
                        count, rsa_bits[testnum], d);
-            rsa_results[testnum][0] = d / (double)count;
+            rsa_results[testnum][0] = (double)count / d;
             rsa_count = count;
         }
 
@@ -2388,7 +2386,7 @@ int speed_main(int argc, char **argv)
                        mr ? "+R2:%ld:%d:%.2f\n"
                        : "%ld %d bit public RSA's in %.2fs\n",
                        count, rsa_bits[testnum], d);
-            rsa_results[testnum][1] = d / (double)count;
+            rsa_results[testnum][1] = (double)count / d;
         }
 
         if (rsa_count <= 1) {
@@ -2435,7 +2433,7 @@ int speed_main(int argc, char **argv)
                        mr ? "+R3:%ld:%d:%.2f\n"
                        : "%ld %d bit DSA signs in %.2fs\n",
                        count, dsa_bits[testnum], d);
-            dsa_results[testnum][0] = d / (double)count;
+            dsa_results[testnum][0] = (double)count / d;
             rsa_count = count;
         }
 
@@ -2461,7 +2459,7 @@ int speed_main(int argc, char **argv)
                        mr ? "+R4:%ld:%d:%.2f\n"
                        : "%ld %d bit DSA verify in %.2fs\n",
                        count, dsa_bits[testnum], d);
-            dsa_results[testnum][1] = d / (double)count;
+            dsa_results[testnum][1] = (double)count / d;
         }
 
         if (rsa_count <= 1) {
@@ -2521,7 +2519,7 @@ int speed_main(int argc, char **argv)
                            mr ? "+R5:%ld:%d:%.2f\n" :
                            "%ld %d bit ECDSA signs in %.2fs \n",
                            count, test_curves_bits[testnum], d);
-                ecdsa_results[testnum][0] = d / (double)count;
+                ecdsa_results[testnum][0] = (double)count / d;
                 rsa_count = count;
             }
 
@@ -2549,7 +2547,7 @@ int speed_main(int argc, char **argv)
                            mr ? "+R6:%ld:%d:%.2f\n"
                            : "%ld %d bit ECDSA verify in %.2fs\n",
                            count, test_curves_bits[testnum], d);
-                ecdsa_results[testnum][1] = d / (double)count;
+                ecdsa_results[testnum][1] = (double)count / d;
             }
 
             if (rsa_count <= 1) {
@@ -2711,7 +2709,7 @@ int speed_main(int argc, char **argv)
                        mr ? "+R7:%ld:%d:%.2f\n" :
                        "%ld %d-bit ECDH ops in %.2fs\n", count,
                        test_curves_bits[testnum], d);
-            ecdh_results[testnum][0] = d / (double)count;
+            ecdh_results[testnum][0] = (double)count / d;
             rsa_count = count;
         }
 
@@ -2791,8 +2789,8 @@ int speed_main(int argc, char **argv)
                    k, rsa_bits[k], rsa_results[k][0], rsa_results[k][1]);
         else
             printf("rsa %4u bits %8.6fs %8.6fs %8.1f %8.1f\n",
-                   rsa_bits[k], rsa_results[k][0], rsa_results[k][1],
-                   1.0 / rsa_results[k][0], 1.0 / rsa_results[k][1]);
+                   rsa_bits[k], 1.0 / rsa_results[k][0], 1.0 / rsa_results[k][1],
+                   rsa_results[k][0], rsa_results[k][1]);
     }
 #endif
 #ifndef OPENSSL_NO_DSA
@@ -2809,8 +2807,8 @@ int speed_main(int argc, char **argv)
                    k, dsa_bits[k], dsa_results[k][0], dsa_results[k][1]);
         else
             printf("dsa %4u bits %8.6fs %8.6fs %8.1f %8.1f\n",
-                   dsa_bits[k], dsa_results[k][0], dsa_results[k][1],
-                   1.0 / dsa_results[k][0], 1.0 / dsa_results[k][1]);
+                   dsa_bits[k], 1.0 / dsa_results[k][0], 1.0 / dsa_results[k][1],
+                   dsa_results[k][0], dsa_results[k][1]);
     }
 #endif
 #ifndef OPENSSL_NO_EC
@@ -2831,8 +2829,8 @@ int speed_main(int argc, char **argv)
             printf("%4u bit ecdsa (%s) %8.4fs %8.4fs %8.1f %8.1f\n",
                    test_curves_bits[k],
                    test_curves_names[k],
-                   ecdsa_results[k][0], ecdsa_results[k][1],
-                   1.0 / ecdsa_results[k][0], 1.0 / ecdsa_results[k][1]);
+                   1.0 / ecdsa_results[k][0], 1.0 / ecdsa_results[k][1],
+                   ecdsa_results[k][0], ecdsa_results[k][1]);
     }
 
     testnum = 1;
@@ -2852,7 +2850,7 @@ int speed_main(int argc, char **argv)
             printf("%4u bit ecdh (%s) %8.4fs %8.1f\n",
                    test_curves_bits[k],
                    test_curves_names[k],
-                   ecdh_results[k][0], 1.0 / ecdh_results[k][0]);
+                   1.0 / ecdh_results[k][0], ecdh_results[k][0]);
     }
 #endif
 
@@ -3039,16 +3037,10 @@ static int do_multi(int multi)
                 sstrsep(&p, sep);
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    rsa_results[k][0] = 1 / (1 / rsa_results[k][0] + 1 / d);
-                else
-                    rsa_results[k][0] = d;
+                rsa_results[k][0] += d;
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    rsa_results[k][1] = 1 / (1 / rsa_results[k][1] + 1 / d);
-                else
-                    rsa_results[k][1] = d;
+                rsa_results[k][1] += d;
             }
 # ifndef OPENSSL_NO_DSA
             else if (strncmp(buf, "+F3:", 4) == 0) {
@@ -3060,16 +3052,10 @@ static int do_multi(int multi)
                 sstrsep(&p, sep);
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    dsa_results[k][0] = 1 / (1 / dsa_results[k][0] + 1 / d);
-                else
-                    dsa_results[k][0] = d;
+                dsa_results[k][0] += d;
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    dsa_results[k][1] = 1 / (1 / dsa_results[k][1] + 1 / d);
-                else
-                    dsa_results[k][1] = d;
+                dsa_results[k][1] += d;
             }
 # endif
 # ifndef OPENSSL_NO_EC
@@ -3082,16 +3068,10 @@ static int do_multi(int multi)
                 sstrsep(&p, sep);
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    ecdsa_results[k][0] = 1 / (1 / ecdsa_results[k][0] + 1 / d);
-                else
-                    ecdsa_results[k][0] = d;
+                ecdsa_results[k][0] += d;
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    ecdsa_results[k][1] = 1 / (1 / ecdsa_results[k][1] + 1 / d);
-                else
-                    ecdsa_results[k][1] = d;
+                ecdsa_results[k][1] += d;
             } else if (strncmp(buf, "+F5:", 4) == 0) {
                 int k;
                 double d;
@@ -3101,11 +3081,7 @@ static int do_multi(int multi)
                 sstrsep(&p, sep);
 
                 d = atof(sstrsep(&p, sep));
-                if (n)
-                    ecdh_results[k][0] = 1 / (1 / ecdh_results[k][0] + 1 / d);
-                else
-                    ecdh_results[k][0] = d;
-
+                ecdh_results[k][0] += d;
             }
 # endif
 

@@ -24,12 +24,12 @@ $ENV{CTLOG_FILE} = srctop_file("test", "ct", "log_list.conf");
 
 my @conf_srcs =  glob(srctop_file("test", "ssl-tests", "*.conf.in"));
 map { s/;.*// } @conf_srcs if $^O eq "VMS";
-my @conf_files = map { basename($_) } @conf_srcs;
-map { s/\.in// } @conf_files;
+my @conf_files = map { basename($_, ".in") } @conf_srcs;
+map { s/\^// } @conf_files if $^O eq "VMS";
 
 # We hard-code the number of tests to double-check that the globbing above
 # finds all files as expected.
-plan tests => 18;  # = scalar @conf_srcs
+plan tests => 21;  # = scalar @conf_srcs
 
 # Some test results depend on the configuration of enabled protocols. We only
 # verify generated sources in the default configuration.
@@ -39,11 +39,15 @@ my $is_default_tls = (disabled("ssl3") && !disabled("tls1") &&
 
 my $is_default_dtls = (!disabled("dtls1") && !disabled("dtls1_2"));
 
+my @all_pre_tls1_3 = ("ssl3", "tls1", "tls1_1", "tls1_2");
 my $no_tls = alldisabled(available_protocols("tls"));
+my $no_pre_tls1_3 = alldisabled(@all_pre_tls1_3);
 my $no_dtls = alldisabled(available_protocols("dtls"));
 my $no_npn = disabled("nextprotoneg");
 my $no_ct = disabled("ct");
 my $no_ec = disabled("ec");
+my $no_dh = disabled("dh");
+my $no_dsa = disabled("dsa");
 my $no_ec2m = disabled("ec2m");
 my $no_ocsp = disabled("ocsp");
 
@@ -55,6 +59,8 @@ my %conf_dependent_tests = (
   "07-dtls-protocol-version.conf" => !$is_default_dtls,
   "10-resumption.conf" => !$is_default_tls,
   "11-dtls_resumption.conf" => !$is_default_dtls,
+  "19-mac-then-encrypt.conf" => !$is_default_tls,
+  "20-cert-select.conf" => !$is_default_tls && !$no_dh && !$no_dsa,
 );
 
 # Add your test here if it should be skipped for some compile-time
@@ -76,6 +82,9 @@ my %skip = (
   "15-certstatus.conf" => $no_tls || $no_ocsp,
   "16-dtls-certstatus.conf" => $no_dtls || $no_ocsp,
   "18-dtls-renegotiate.conf" => $no_dtls,
+  "19-mac-then-encrypt.conf" => $no_pre_tls1_3,
+  "20-cert-select.conf" => disabled("tls1_2") || $no_ec,
+  "21-key-update.conf" => disabled("tls1_3"),
 );
 
 foreach my $conf (@conf_files) {

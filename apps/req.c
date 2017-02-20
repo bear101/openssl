@@ -121,7 +121,7 @@ const OPTIONS req_options[] = {
     {"multivalue-rdn", OPT_MULTIVALUE_RDN, '-',
      "Enable support for multivalued RDNs"},
     {"days", OPT_DAYS, 'p', "Number of days cert is valid for"},
-    {"set_serial", OPT_SET_SERIAL, 'p', "Serial number to use"},
+    {"set_serial", OPT_SET_SERIAL, 's', "Serial number to use"},
     {"extensions", OPT_EXTENSIONS, 's',
      "Cert extension section (override value in config file)"},
     {"reqexts", OPT_REQEXTS, 's',
@@ -1273,7 +1273,7 @@ static int req_check_len(int len, int n_min, int n_max)
     }
     if ((n_max >= 0) && (len > n_max)) {
         BIO_printf(bio_err,
-                   "string is too long, it needs to be less than  %d bytes long\n",
+                   "string is too long, it needs to be no more than %d bytes long\n",
                    n_max);
         return (0);
     }

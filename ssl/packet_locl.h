@@ -700,6 +700,15 @@ int WPACKET_close(WPACKET *pkt);
 int WPACKET_finish(WPACKET *pkt);
 
 /*
+ * Iterate through all the sub-packets and write out their lengths as if they
+ * were being closed. The lengths will be overwritten with the final lengths
+ * when the sub-packets are eventually closed (which may be different if more
+ * data is added to the WPACKET). This function fails if a sub-packet is of 0
+ * length and WPACKET_FLAGS_ABANDON_ON_ZERO_LENGTH is set.
+ */
+int WPACKET_fill_lengths(WPACKET *pkt);
+
+/*
  * Initialise a new sub-packet. Additionally |lenbytes| of data is preallocated
  * at the start of the sub-packet to store its length once we know it. Don't
  * call this directly. Use the convenience macros below instead.
@@ -728,7 +737,7 @@ int WPACKET_start_sub_packet(WPACKET *pkt);
 /*
  * Allocate bytes in the WPACKET for the output. This reserves the bytes
  * and counts them as "written", but doesn't actually do the writing. A pointer
- * to the allocated bytes is stored in |*allocbytes|.
+ * to the allocated bytes is stored in |*allocbytes|. |allocbytes| may be NULL.
  * WARNING: the allocated bytes must be filled in immediately, without further
  * WPACKET_* calls. If not then the underlying buffer may be realloc'd and
  * change its location.
@@ -853,6 +862,12 @@ int WPACKET_get_total_written(WPACKET *pkt, size_t *written);
  * allocated for the length itself.
  */
 int WPACKET_get_length(WPACKET *pkt, size_t *len);
+
+/*
+ * Returns a pointer to the current write location, but does not allocate any
+ * bytes.
+ */
+unsigned char *WPACKET_get_curr(WPACKET *pkt);
 
 /* Release resources in a WPACKET if a failure has occurred. */
 void WPACKET_cleanup(WPACKET *pkt);

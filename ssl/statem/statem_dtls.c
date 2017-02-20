@@ -656,7 +656,7 @@ dtls1_process_out_of_seq_message(SSL *s, const struct hm_header_st *msg_hdr)
         }
     } else {
         if (frag_len != msg_hdr->msg_len) {
-            return dtls1_reassemble_fragment(s, msg_hdr);;
+            return dtls1_reassemble_fragment(s, msg_hdr);
         }
 
         if (frag_len > dtls1_max_handshake_message_len(s))
@@ -788,8 +788,10 @@ static int dtls_get_reassembled_message(SSL *s, int *errtype, size_t *len)
         return 0;
     }
 
-    if (!s->server && s->d1->r_msg_hdr.frag_off == 0 &&
-        wire[0] == SSL3_MT_HELLO_REQUEST) {
+    if (!s->server
+            && s->d1->r_msg_hdr.frag_off == 0
+            && s->statem.hand_state != TLS_ST_OK
+            && wire[0] == SSL3_MT_HELLO_REQUEST) {
         /*
          * The server may always send 'Hello Request' messages -- we are
          * doing a handshake anyway now, so ignore them if their format is
